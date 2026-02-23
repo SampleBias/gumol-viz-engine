@@ -1,5 +1,18 @@
 # Gumol Viz Engine Activity Log
 
+## 2026-02-23 13:57 - Session Started: Fix Panic Runtime Conflict with Bevy Dynamic Linking
+- **Identified critical issue**: Panic runtime conflict with Bevy dynamic_linking feature
+- **Root cause**: Cargo.toml uses `bevy = { version = "0.14", features = ["dynamic_linking"] }` but `[profile.release]` has `panic = "abort"`
+- **Conflict explained**: 
+  - Dynamic linking requires panic **unwinding** support for cross-DLL exception handling
+  - `panic = "abort"` removes unwinding support entirely
+  - These two settings are mutually incompatible
+- **Solution approach**: Remove `panic = "abort"` from release profile or use `unwind` explicitly
+- **Files to modify**: `Cargo.toml` - profile.release section
+- **Next steps**: Update Cargo.toml and verify compilation
+
+---
+
 ## 2026-02-23 14:30 - Phase 1 Implementation: File Loading & Spawning Systems Complete
 - **Completed Phase 1 implementation** for file loading and atom entity spawning
 - **Created `systems/loading.rs` module** (317 lines):
@@ -99,3 +112,12 @@ Phase 1 foundation is complete. Next priorities:
 *- Files created/modified*
 *- Commands executed*
 *- Any important notes or decisions*
+
+
+## 2026-02-23 13:57 - Session Started
+- Project structure files verified
+- Resumed work on existing project
+- Todo.md updated with new session section
+- PROJECT_README.md context checked
+- Ready for continued development
+

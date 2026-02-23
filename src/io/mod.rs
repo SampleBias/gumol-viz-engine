@@ -62,6 +62,11 @@ impl FileFormat {
         }
     }
 
+    /// Check if this format is currently loadable (parser implemented)
+    pub fn is_loadable(&self) -> bool {
+        matches!(self, FileFormat::XYZ | FileFormat::PDB)
+    }
+
     /// Detect file format from content
     pub fn from_content(content: &str) -> Self {
         let first_line = content.lines().next().unwrap_or("");

@@ -12,8 +12,21 @@ readme = "README.md"
 rust-version = "1.75"
 
 [dependencies]
-# Bevy game engine
-bevy = { version = "0.14", features = ["dynamic_linking"] }
+# Bevy game engine - use dynamic_linking only for dev builds, not release
+bevy = { version = "0.14", default-features = false, features = [
+    "bevy_winit",
+    "bevy_render",
+    "bevy_asset",
+    "bevy_pbr",
+    "bevy_core_pipeline",
+    "bevy_ui",
+    "bevy_text",
+    "bevy_sprite",
+    "animation",
+    "multi_threaded",
+    "png",
+    "x11",
+] }
 
 # UI overlay
 bevy_egui = "0.28"
@@ -66,6 +79,9 @@ serde_json = "1.0"
 # UUID for unique identifiers
 uuid = { version = "1.8", features = ["v4"] }
 
+# Native file dialogs
+rfd = "0.15"
+
 [dev-dependencies]
 criterion = "0.5"      # Benchmarking
 proptest = "1.5"       # Property-based testing
@@ -78,6 +94,9 @@ video = []
 
 # Enable all optional features
 all-features = ["video"]
+
+# Enable dynamic linking for faster dev builds (use: cargo build --features dev_dynamic)
+dev_dynamic = ["bevy/dynamic_linking"]
 
 # Optimizations for development builds
 [profile.dev]
@@ -93,7 +112,13 @@ opt-level = 3
 lto = "thin"
 codegen-units = 1
 strip = true
-panic = "abort"
+panic = "abort"  # OK for release since we don't use dynamic_linking there
+
+# Profile with dynamic linking enabled (requires panic = "unwind")
+[profile.dev-dynamic]
+inherits = "dev"
+opt-level = 1
+panic = "unwind"  # Required for dynamic_linking compatibility
 
 # Benchmark profile
 [profile.bench]

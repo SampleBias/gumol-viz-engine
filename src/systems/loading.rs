@@ -85,6 +85,10 @@ impl FileHandle {
     }
 }
 
+/// Resource holding CLI file path from startup args (if any)
+#[derive(Resource, Default, Debug)]
+pub struct CliFileArg(pub Option<PathBuf>);
+
 /// Event sent when a file is requested to be loaded
 #[derive(Event, Debug)]
 pub struct LoadFileEvent {
@@ -328,15 +332,18 @@ pub fn print_simulation_data(sim_data: Res<SimulationData>) {
 
 /// Register all loading systems
 pub fn register(app: &mut App) {
+    let cli_path = std::env::args()
+        .nth(1)
+        .map(PathBuf::from);
+
     app.init_resource::<SimulationData>()
+        .insert_resource(CliFileArg(cli_path))
         .add_event::<LoadFileEvent>()
         .add_event::<FileLoadedEvent>()
         .add_event::<FileLoadErrorEvent>()
+        .add_systems(Startup, load_cli_file)
         .add_systems(Update, handle_load_file_events)
         .add_systems(Update, print_simulation_data);
-
-    // Uncomment to enable default file loading on startup
-    // .add_systems(Startup, load_default_file);
 
     info!("Loading systems registered");
 }
