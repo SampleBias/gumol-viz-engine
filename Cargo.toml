@@ -1,0 +1,126 @@
+[package]
+name = "gumol-viz-engine"
+version = "0.1.0"
+edition = "2021"
+description = "A high-performance Rust-based visualization engine for Molecular Dynamics simulations"
+authors = ["Gumol Viz Engine Contributors"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yourusername/gumol-viz-engine"
+keywords = ["molecular-dynamics", "visualization", "bevy", "md-simulation", "science"]
+categories = ["science", "visualization", "rendering"]
+readme = "README.md"
+rust-version = "1.75"
+
+[dependencies]
+# Bevy game engine
+bevy = { version = "0.14", features = ["dynamic_linking"] }
+
+# UI overlay
+bevy_egui = "0.28"
+
+# 3D object picking
+bevy_mod_picking = "0.20"
+
+# Camera controls
+bevy_panorbit_camera = "0.19"
+
+# Parallel processing
+rayon = "1.10"
+
+# Linear algebra
+nalgebra = "0.33"
+
+# Fast hashing
+rustc-hash = "2.0"
+
+# Memory-mapped files
+memmap2 = "0.9"
+
+# Parser combinators
+nom = "7.1"
+
+# Binary file parsing
+byteorder = "1.5"
+
+# Zero-copy casting
+bytemuck = "1.18"
+
+# XML parsing (for mmCIF)
+quick-xml = "0.36"
+
+# Fast HashMap
+ahash = "0.8"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Serde for serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# UUID for unique identifiers
+uuid = { version = "1.8", features = ["v4"] }
+
+[dev-dependencies]
+criterion = "0.5"      # Benchmarking
+proptest = "1.5"       # Property-based testing
+
+[features]
+default = []
+
+# Enable video export (requires FFmpeg)
+video = []
+
+# Enable all optional features
+all-features = ["video"]
+
+# Optimizations for development builds
+[profile.dev]
+opt-level = 1
+
+# Optimize for dependencies in dev builds
+[profile.dev.package."*"]
+opt-level = 3
+
+# Optimized release builds
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+# Benchmark profile
+[profile.bench]
+inherits = "release"
+
+[[bin]]
+name = "gumol-viz"
+path = "src/main.rs"
+
+[[example]]
+name = "basic_load"
+path = "examples/basic_load.rs"
+
+[[example]]
+name = "xyz_viewer"
+path = "examples/xyz_viewer.rs"
+
+[[example]]
+name = "pdb_viewer"
+path = "examples/pdb_viewer.rs"
+
+[[bench]]
+name = "parsing"
+harness = false
+path = "benches/parsing.rs"
+
+[[bench]]
+name = "rendering"
+harness = false
+path = "benches/rendering.rs"
