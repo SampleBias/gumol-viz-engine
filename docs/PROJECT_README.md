@@ -1,0 +1,187 @@
+# Gumol Viz Engine - Development Context
+
+## Project Purpose
+A high-performance Rust-based visualization engine for Molecular Dynamics (MD) simulations using the Bevy game engine. Designed for interactive, game-like visualization of molecular structures with GPU acceleration.
+
+## Architecture Overview
+- **Project Type**: Scientific Visualization / Molecular Dynamics
+- **Development Status**: Early Development - Foundation complete, systems implementation needed
+- **Development Framework**: Bevy 0.14 ECS (Entity-Component-System)
+- **Context Tracking**: Integrated with Vybrid development workflow
+
+## Technology Stack
+- **Language**: Rust 1.75+
+- **Game Engine**: Bevy 0.14 (ECS-based, GPU-accelerated rendering)
+- **UI Framework**: EGUI 0.28 (immediate-mode GUI)
+- **3D Interaction**: bevy_mod_picking 0.20, bevy_panorbit_camera 0.19
+- **Math**: nalgebra 0.33
+- **Parsing**: nom 7.1 (parser combinators)
+- **Parallel Processing**: rayon 1.10
+- **Error Handling**: thiserror 1.0, anyhow 1.0
+
+## Project Structure
+```
+gumol-viz-engine/
+├── src/
+│   ├── core/           # Core data structures (atom, bond, molecule, trajectory)
+│   ├── io/             # File format parsers (xyz.rs, pdb.rs implemented)
+│   ├── rendering/      # Rendering systems (mesh generation)
+│   ├── systems/        # Bevy ECS systems (stubs, needs implementation)
+│   ├── camera/         # Camera controls (stubs)
+│   ├── interaction/    # User interaction (stubs)
+│   ├── ui/             # EGUI systems (stubs)
+│   ├── export/         # Export functionality (stubs)
+│   └── utils/          # Utility functions (geometry, colors, math)
+├── examples/           # Example applications
+├── docs/               # Documentation (DEVELOPMENT_PLAN.md, ARCHITECTURE.md, etc.)
+└── tasks/              # Development task tracking
+```
+
+## Current Implementation Status
+
+### ✅ Completed Features
+- **Core Data Structures**: Complete implementations of Atom, Element, Bond, Molecule, Trajectory, FrameData, TimelineState
+- **XYZ Parser**: Fully functional with streaming support for large files
+- **PDB Parser**: Complete with ATOM, HETATM, CONECT record parsing
+- **Element System**: All 118 elements with CPK colors, van der Waals radii, atomic masses
+- **Mesh Generation**: Basic sphere (atom) and cylinder (bond) mesh generation
+- **Bevy Plugin Structure**: GumolVizPlugin with module registration
+- **Demo Scene**: Water molecule (H2O) with atoms and bonds in main.rs
+
+### 🔨 In Progress / Stubs
+- **File Loading System**: Module exists but needs implementation
+- **Entity Spawning System**: Module exists but needs implementation
+- **Timeline System**: Data structures complete, playback system needs implementation
+- **Camera Controls**: Using bevy_panorbit_camera, custom controls stubbed
+- **Atom Selection**: Module exists but raycasting selection not implemented
+- **UI Systems**: EGUI plugin added, but no UI panels implemented
+- **Export Systems**: Module structure exists, no implementations
+
+### ❌ Not Implemented
+- Bond detection and rendering
+- Timeline playback animation
+- Atom interaction (raycasting, selection highlighting)
+- Multiple visualization modes (CPK, ball-and-stick, licorice)
+- Measurement tools (distance, angle, dihedral)
+- Export functionality (screenshots, videos)
+- Secondary file formats (GRO, DCD, mmCIF)
+- Surface generation
+- Cartoon representation
+
+## Getting Started
+
+### Prerequisites
+- Rust 1.75 or higher
+- Cargo (comes with Rust)
+- For video export: FFmpeg (optional)
+
+### Installation
+```bash
+git clone <repository-url>
+cd gumol-viz-engine
+cargo build --release
+```
+
+### Running the Project
+```bash
+# Run the main demo (water molecule)
+cargo run --release
+
+# Run examples (need to be implemented)
+cargo run --example basic_load
+cargo run --example xyz_viewer
+cargo run --example pdb_viewer
+```
+
+### Current Demo
+The main application currently shows:
+- A 3D scene with a water molecule (H2O)
+- Orbit camera controls (mouse drag to rotate, scroll to zoom)
+- Red oxygen atom with two white hydrogen atoms
+- Cylindrical bonds connecting atoms
+- Point and directional lighting
+- F11 toggles fullscreen
+
+## Development Status
+
+### Current Phase: Foundation Complete
+- ✅ Project structure established
+- ✅ Dependencies configured in Cargo.toml
+- ✅ Core data structures implemented
+- ✅ Primary file parsers (XYZ, PDB) working
+- ✅ Basic mesh generation functional
+- ✅ Bevy app and demo scene working
+
+### Next Priority Phase: System Implementation
+According to `tasks/todo.md`, the next priorities are:
+1. **File Loading System** - Connect parsers to Bevy scene loading
+2. **Timeline/Animation** - Implement frame playback
+3. **Atom Selection** - Add raycasting interaction
+4. **Bond Rendering** - Display bonds between atoms
+5. **Visualization Modes** - Add different rendering styles
+
+### Task Tracking
+- See `tasks/todo.md` for detailed task breakdown and progress
+- Tasks organized by priority (HIGH/MEDIUM/LOW)
+- 7 major phases identified
+
+### Activity History
+- See `docs/activity.md` for detailed development timeline
+
+## Key Context for AI Agents
+
+### Development Workflow
+- This project follows the Vybrid development methodology
+- Three mandatory files maintained: `tasks/todo.md`, `docs/activity.md`, `docs/PROJECT_README.md`
+- All development activities tracked and documented systematically
+- Tasks executed immediately - no approval waiting required
+
+### Code Style & Standards
+- Use `cargo fmt` for formatting
+- Pass `cargo clippy -- -D warnings`
+- Comprehensive unit tests for new functionality
+- Add documentation to public APIs
+- Follow Rust idioms and Bevy best practices
+
+### Bevy-Specific Guidelines
+- Use ECS pattern: Entities with Components processed by Systems
+- Resources for global state (TimelineState, SelectionState, SimulationData)
+- Plugin architecture for modular organization
+- Component derive macros (Component, Reflect, Default)
+- System ordering using `.chain()` for dependencies
+
+### Performance Targets
+- 100,000+ atoms at 60 FPS
+- Handle trajectories with 10,000+ frames
+- Support multi-gigabyte files via streaming
+- GPU-accelerated rendering with instancing
+
+### File Format Priority
+1. **Primary** (Complete): XYZ, PDB
+2. **Secondary** (Not started): GRO, DCD, mmCIF
+
+## Project Evolution
+- **Initial Setup**: 2026-02-23 12:54 (project structure files)
+- **Codebase Review**: 2026-02-23 13:00 (comprehensive analysis)
+- **Context Update**: 2026-02-23 13:05 (this update)
+- **Major Changes**: Foundation complete, transitioning to system implementation
+
+## Documentation Links
+- [Task List](../tasks/todo.md) - Current development tasks with priorities
+- [Activity Log](activity.md) - Detailed timeline of all development activities
+- [Development Plan](DEVELOPMENT_PLAN.md) - Full 10-week development roadmap
+- [Architecture Guide](ARCHITECTURE.md) - System architecture diagrams
+- [Setup Guide](SETUP.md) - Environment setup instructions
+- [README](../README.md) - Project overview and quick start
+
+## Important Notes
+- Project compiles successfully with only minor warnings
+- Parsers are well-tested and functional
+- The main gap is between data loading and visualization (the "glue" systems)
+- Focus on connecting existing data structures to Bevy rendering pipeline
+- Test with real molecular files as features are implemented
+
+---
+*Last Updated: 2026-02-23 13:05*
+*Context Version: 2.0*
+*Development Phase: System Implementation*

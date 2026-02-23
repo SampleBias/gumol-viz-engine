@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 use gumol_viz_engine::GumolVizPlugin;
+use gumol_viz_engine::systems::loading::{LoadFileEvent, SimulationData};
+use std::path::PathBuf;
 
 fn main() {
     // Initialize logging
@@ -29,7 +31,9 @@ fn main() {
         .add_plugins(GumolVizPlugin)
         // Add example-specific systems
         .add_systems(Startup, setup_scene)
+        .add_systems(Startup, load_demo_trajectory)
         .add_systems(Update, toggle_fullscreen)
+        .add_systems(Update, ui_example)
         .run();
 }
 
@@ -201,4 +205,52 @@ fn toggle_fullscreen(
             };
         }
     }
+}
+
+/// Load a demo trajectory file
+fn load_demo_trajectory(mut load_events: EventWriter<LoadFileEvent>, sim_data: Res<SimulationData>) {
+    // Only load if no data is already loaded
+    if sim_data.loaded {
+        return;
+    }
+
+    // Create a demo XYZ trajectory in memory
+    let demo_path = PathBuf::from("demo_trajectory.xyz");
+
+    // Check if demo file exists
+    if demo_path.exists() {
+        info!("Loading demo trajectory from file");
+        load_events.send(LoadFileEvent { path: demo_path });
+    } else {
+        info!("No demo file found, using built-in water molecule");
+    }
+}
+
+/// Simple UI example showing system status
+fn ui_example(
+    mut contexts: egui::Contexts,
+    sim_data: Res<SimulationData>,
+    atom_entities: Res<gumol_viz_engine::systems::spawning::AtomEntities>,
+) {
+    egui::Window::new("Gumol Viz Engine").show(contexts.ctx_mut(), |ui| {
+        ui.heading("System Status");
+        ui.separator();
+
+        if sim_data.loaded {
+            ui.label(format!("✓ File loaded: {}", sim_data.trajectory.file_path.display()));
+            ui.label(format!("  Atoms: {}", sim_data.num_atoms()));
+            ui.label(format!("  Frames: {}", sim_data.num_frames()));
+            ui.label(format!("  Time: {:.2} fs", sim_data.total_time()));
+            ui.label(format!("  Entities: {}", atom_entities.entities.len()));
+        } else {
+            ui.label("✗ No file loaded");
+            ui.label("  Displaying demo water molecule");
+        }
+
+        ui.separator();
+        ui.label("Controls:");
+        ui.label("  Mouse drag - Rotate camera");
+        ui.label("  Scroll - Zoom");
+        ui.label("  F11 - Toggle fullscreen");
+    });
 }

@@ -9,7 +9,6 @@ use crate::core::atom::{Atom, AtomData, Element};
 use crate::core::trajectory::{FrameData, Trajectory, TrajectoryMetadata};
 use crate::io::{FileFormat, IOError, IOResult};
 use bevy::prelude::*;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -116,10 +115,10 @@ impl XYZParser {
                     }
 
                     // Parse element
-                    let element = Element::from_symbol(parts[0]).map_err(|_| IOError::ParseError {
-                        line: atom_line_num,
-                        message: format!("Unknown element: {}", parts[0]),
-                    })?;
+                    let element = Element::from_symbol(parts[0]).unwrap_or_else(|_| {
+                        warn!("Unknown element: {}, using Unknown", parts[0]);
+                        Element::Unknown
+                    });
 
                     // Parse position
                     let x = parts[1]
