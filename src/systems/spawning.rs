@@ -2,7 +2,7 @@
 //!
 //! This system creates Bevy entities for atoms and manages their lifecycle.
 
-use crate::core::atom::{Atom, Element};
+use crate::core::atom::Atom;
 use crate::core::trajectory::FrameData;
 use crate::rendering;
 use bevy::prelude::*;
@@ -33,45 +33,18 @@ pub struct AtomsSpawnedEvent {
 #[derive(Event, Debug)]
 pub struct AtomsDespawnedEvent;
 
-/// Clear all spawned atoms
-pub fn despawn_all_atoms(
-    mut commands: Commands,
-    atom_entities: Res<AtomEntities>,
-    mut entities: Query<Entity, With<SpawnedAtom>>,
-    mut despawned_event: EventWriter<AtomsDespawnedEvent>,
-) {
-    let count = entities.iter().count();
-
-    if count > 0 {
-        info!("Despawning {} atoms", count);
-
-        // Despawn all entities
-        for entity in entities.iter() {
-            commands.entity(entity).despawn_recursive();
-        }
-
-        despawned_event.send(AtomsDespawnedEvent);
-    }
-}
-
-/// Spawn atoms from frame data
-pub fn spawn_atoms_from_frame(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+/// Internal function to spawn atoms from frame data
+fn spawn_atoms_from_frame_internal(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
     frame_data: &FrameData,
     atom_data: &[crate::core::atom::AtomData],
-    mut atom_entities: ResMut<AtomEntities>,
-    mut spawned_event: EventWriter<AtomsSpawnedEvent>,
-) {
+) -> HashMap<u32, Entity> {
     info!("Spawning {} atoms", atom_data.len());
 
-    // Clear existing entities
-    for (_, entity) in atom_entities.entities.drain() {
-        commands.entity(entity).despawn_recursive();
-    }
+    let mut entity_map = HashMap::new();
 
-    // Spawn new atoms
     for atom_info in atom_data {
         if let Some(position) = frame_data.get_position(atom_info.id) {
             // Generate mesh for this atom type
@@ -81,9 +54,9 @@ pub fn spawn_atoms_from_frame(
             // Create material with CPK color
             let color = atom_info.element.cpk_color();
             let material = materials.add(StandardMaterial {
-                base_color: Color::rgb(color[0], color[1], color[2]),
+                base_color: Color::srgb(color[0], color[1], color[2]),
                 metallic: 0.1,
-                roughness: 0.2,
+                perceptual_roughness: 0.2,
                 ..default()
             });
 
@@ -113,17 +86,33 @@ pub fn spawn_atoms_from_frame(
                 ))
                 .id();
 
-            // Track entity
-            atom_entities.entities.insert(atom_info.id, entity);
+            // Track the entity
+            entity_map.insert(atom_info.id, entity);
         }
     }
 
-    info!("Spawned {} atom entities", atom_entities.entities.len());
+    info!("Spawned {} atom entities", entity_map.len());
+    entity_map
+}
 
-    // Send event
-    spawned_event.send(AtomsSpawnedEvent {
-        count: atom_entities.entities.len(),
-    });
+/// Clear all spawned atoms
+pub fn despawn_all_atoms(
+    mut commands: Commands,
+    mut atom_entities: ResMut<AtomEntities>,
+    mut despawned_event: EventWriter<AtomsDespawnedEvent>,
+) {
+    let count = atom_entities.entities.len();
+
+    if count > 0 {
+        info!("Despawning {} atoms", count);
+
+        // Despawn all entities
+        for (_, entity) in atom_entities.entities.drain() {
+            commands.entity(entity).despawn_recursive();
+        }
+
+        despawned_event.send(AtomsDespawnedEvent);
+    }
 }
 
 /// System to spawn atoms when simulation data is loaded
@@ -132,36 +121,43 @@ pub fn spawn_atoms_on_load(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     sim_data: Res<crate::systems::loading::SimulationData>,
-    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
     mut atom_entities: ResMut<AtomEntities>,
     mut spawned_event: EventWriter<AtomsSpawnedEvent>,
 ) {
-    // Only spawn when a file is loaded and we have data
-    if !file_loaded_events.is_empty() && sim_data.loaded && !atom_entities.entities.is_empty() {
+    // Check if atoms are already spawned
+    if !atom_entities.entities.is_empty() {
         return;
     }
 
-    for event in file_loaded_events.read() {
-        info!("File loaded, spawning {} atoms", event.num_atoms);
+    // Check if we should spawn (any file loaded event)
+    let should_spawn = file_loaded_events.read().next().is_some();
 
-        if sim_data.loaded && !sim_data.atom_data.is_empty() {
-            // Get the first frame
-            if let Some(first_frame) = sim_data.trajectory.get_frame(0) {
-                spawn_atoms_from_frame(
-                    commands,
-                    meshes,
-                    materials,
-                    first_frame,
-                    &sim_data.atom_data,
-                    atom_entities,
-                    spawned_event,
-                );
-            }
+    if should_spawn && sim_data.loaded && !sim_data.atom_data.is_empty() {
+        info!("File loaded, spawning {} atoms", sim_data.atom_data.len());
+
+        // Get the first frame
+        if let Some(first_frame) = sim_data.trajectory.get_frame(0) {
+            let new_entities = spawn_atoms_from_frame_internal(
+                &mut commands,
+                &mut meshes,
+                &mut materials,
+                first_frame,
+                &sim_data.atom_data,
+            );
+
+            // Store entities in the resource
+            atom_entities.entities = new_entities;
+
+            // Send event
+            spawned_event.send(AtomsSpawnedEvent {
+                count: atom_entities.entities.len(),
+            });
         }
     }
 }
 
-/// Update atom positions from current frame
+/// Update atom positions from the current frame
 pub fn update_atom_positions(
     sim_data: Res<crate::systems::loading::SimulationData>,
     timeline: Res<crate::core::trajectory::TimelineState>,
@@ -182,11 +178,11 @@ pub fn update_atom_positions(
 }
 
 /// Calculate the center of mass of all atoms
-pub fn calculate_center_of_mass(atom_query: Query<(&SpawnedAtom, &Transform)>) -> Option<Vec3> {
+pub fn calculate_center_of_mass(atom_query: Query<&Transform, (With<SpawnedAtom>, Without<Camera>)>) -> Option<Vec3> {
     let mut sum = Vec3::ZERO;
     let mut count = 0;
 
-    for (_, transform) in atom_query.iter() {
+    for transform in atom_query.iter() {
         sum += transform.translation;
         count += 1;
     }
@@ -201,7 +197,7 @@ pub fn calculate_center_of_mass(atom_query: Query<(&SpawnedAtom, &Transform)>) -
 /// Center the camera on the molecule
 pub fn center_camera_on_molecule(
     mut camera_query: Query<&mut Transform, With<Camera>>,
-    atom_query: Query<&Transform, With<SpawnedAtom>>,
+    atom_query: Query<&Transform, (With<SpawnedAtom>, Without<Camera>)>,
 ) {
     let center = if let Some(center) = calculate_center_of_mass(atom_query) {
         center
@@ -209,7 +205,7 @@ pub fn center_camera_on_molecule(
         return;
     };
 
-    // Move camera to look at the center
+    // Move camera to look at center
     for mut transform in camera_query.iter_mut() {
         transform.look_at(center, Vec3::Y);
     }

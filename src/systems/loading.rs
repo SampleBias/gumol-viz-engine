@@ -4,9 +4,14 @@
 //! the parsed data in Bevy resources.
 
 use crate::core::atom::AtomData;
-use crate::core::trajectory::{Trajectory, TrajectoryMetadata};
-use crate::io::{FileFormat, IOResult, XYZParser, PDBParser};
+use crate::core::trajectory::Trajectory;
+use crate::core::atom::Element;
+use crate::io::{FileFormat, IOResult};
+use crate::io::xyz::XYZParser;
+use crate::io::pdb::PDBParser;
 use bevy::prelude::*;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 /// Resource containing the loaded simulation data
@@ -142,58 +147,43 @@ fn create_atom_data_from_xyz(trajectory: &Trajectory) -> IOResult<Vec<AtomData>>
     if let Some(first_frame) = trajectory.get_frame(0) {
         // Parse XYZ file to get element information
         if trajectory.file_path.exists() {
-            use std::io::BufRead;
             let file = File::open(&trajectory.file_path)?;
             let reader = BufReader::new(file);
-
             let mut lines = reader.lines();
             let mut atom_index = 0;
 
             // Skip first line (number of atoms)
-            lines.next();
-
+            let _ = lines.next();
             // Skip comment line
-            lines.next();
+            let _ = lines.next();
 
             // Parse atom lines
-            for line in lines {
-                if atom_index >= trajectory.num_atoms {
+            while atom_index < trajectory.num_atoms {
+                if let Some(Ok(line)) = lines.next() {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+
+                    if parts.len() >= 4 {
+                        // Parse element
+                        let element = Element::from_symbol(parts[0]).unwrap_or_else(|_| {
+                            warn!("Unknown element: {}, using Unknown", parts[0]);
+                            Element::Unknown
+                        });
+
+                        // Create atom data
+                        atom_data.push(AtomData::new(
+                            atom_index as u32,
+                            element,
+                            0,                             // residue ID
+                            "UNK".to_string(),             // residue name
+                            "A".to_string(),               // chain ID
+                            parts[0].to_string(),          // atom name (use element symbol)
+                        ));
+
+                        atom_index += 1;
+                    }
+                } else {
                     break;
                 }
-
-                let parts: Vec<&str> = line
-                    .ok()
-                    .and_then(|l| {
-                        let p: Vec<&str> = l.split_whitespace().collect();
-                        if p.len() >= 4 {
-                            Some(p)
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or_default();
-
-                if parts.is_empty() {
-                    break;
-                }
-
-                // Parse element
-                let element = Element::from_symbol(parts[0]).unwrap_or_else(|_| {
-                    warn!("Unknown element: {}, using Unknown", parts[0]);
-                    Element::Unknown
-                });
-
-                // Create atom data
-                atom_data.push(AtomData::new(
-                    atom_index as u32,
-                    element,
-                    0,                             // residue ID
-                    "UNK".to_string(),             // residue name
-                    "A".to_string(),               // chain ID
-                    parts[0].to_string(),          // atom name (use element symbol)
-                ));
-
-                atom_index += 1;
             }
         } else {
             // Fallback: create atom data without element info
@@ -238,13 +228,18 @@ fn create_atom_data_from_pdb(trajectory: &Trajectory) -> IOResult<Vec<AtomData>>
 /// System to handle file loading events
 pub fn handle_load_file_events(
     mut commands: Commands,
-    mut events: EventReader<LoadFileEvent>,
+    mut load_events: EventReader<LoadFileEvent>,
     mut load_success: EventWriter<FileLoadedEvent>,
     mut load_error: EventWriter<FileLoadErrorEvent>,
     mut sim_data: ResMut<SimulationData>,
     mut file_handle: Option<ResMut<FileHandle>>,
 ) {
-    for event in events.read() {
+    // Early return if no events
+    if load_events.is_empty() {
+        return;
+    }
+
+    for event in load_events.read() {
         info!("Received load file event: {:?}", event.path);
 
         // Attempt to load the file
@@ -261,13 +256,16 @@ pub fn handle_load_file_events(
                 sim_data.atom_data = atom_data.clone();
                 sim_data.loaded = true;
 
-                // Update file handle
+                // Update file handle - handle resource outside of event loop
                 let format = FileFormat::from_path(&event.path);
                 let handle = FileHandle::new(event.path.clone(), format);
 
-                if let Some(mut handle) = file_handle {
-                    *handle = handle;
+                if file_handle.is_some() {
+                    // File handle resource already exists, update it
+                    // This will be handled by the resource system
+                    commands.insert_resource(handle);
                 } else {
+                    // Create new file handle resource
                     commands.insert_resource(handle);
                 }
 
@@ -278,13 +276,13 @@ pub fn handle_load_file_events(
                     num_frames: trajectory.num_frames(),
                 });
             }
-            Err(e) => {
-                error!("Failed to load file {:?}: {}", event.path, e);
+            Err(_e) => {
+                error!("Failed to load file {:?}: {:?}", event.path, _e);
 
                 // Send error event
                 load_error.send(FileLoadErrorEvent {
                     path: event.path.clone(),
-                    error: e.to_string(),
+                    error: _e.to_string(),
                 });
             }
         }

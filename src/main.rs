@@ -95,16 +95,14 @@ fn spawn_water_molecule(
     materials: &mut Assets<StandardMaterial>,
 ) {
     use gumol_viz_engine::core::atom::Element;
+    use gumol_viz_engine::rendering;
 
     // Oxygen atom (red, larger)
-    let oxygen_mesh = meshes.add(Mesh::from(shape::Icosahedron {
-        radius: 0.66, // CPK radius for oxygen
-        subdivisions: 3,
-    }));
+    let oxygen_mesh = meshes.add(rendering::generate_atom_mesh(Element::O.vdw_radius()));
     let oxygen_material = materials.add(StandardMaterial {
         base_color: Color::rgb(0.8, 0.1, 0.1),
         metallic: 0.1,
-        roughness: 0.2,
+        perceptual_roughness: 0.2,
         ..default()
     });
 
@@ -116,18 +114,15 @@ fn spawn_water_molecule(
     });
 
     // Hydrogen atoms (white, smaller)
-    let hydrogen_mesh = meshes.add(Mesh::from(shape::Icosahedron {
-        radius: 0.31, // CPK radius for hydrogen
-        subdivisions: 2,
-    }));
+    let hydrogen_mesh = meshes.add(rendering::generate_atom_mesh(Element::H.vdw_radius()));
     let hydrogen_material = materials.add(StandardMaterial {
         base_color: Color::rgb(0.9, 0.9, 0.9),
         metallic: 0.0,
-        roughness: 0.1,
+        perceptual_roughness: 0.1,
         ..default()
     });
 
-    // H1 position (104.5° angle)
+    // H1 position
     commands.spawn(PbrBundle {
         mesh: hydrogen_mesh.clone(),
         material: hydrogen_material.clone(),
@@ -144,11 +139,11 @@ fn spawn_water_molecule(
     });
 
     // Add O-H bonds as cylinders
-    let bond_mesh = meshes.add(generate_bond_cylinder(0.1, 0.96));
+    let bond_mesh = meshes.add(rendering::generate_bond_mesh(0.96, 0.1));
     let bond_material = materials.add(StandardMaterial {
         base_color: Color::rgb(0.7, 0.7, 0.7),
         metallic: 0.2,
-        roughness: 0.3,
+        perceptual_roughness: 0.3,
         ..default()
     });
 
@@ -177,24 +172,9 @@ fn spawn_water_molecule(
     });
 }
 
-/// Generate a cylinder mesh for a bond
-fn generate_bond_cylinder(radius: f32, length: f32) -> Mesh {
-    let mut mesh = Mesh::from(shape::Cylinder {
-        radius,
-        height: length,
-        resolution: 16,
-        segments: 1,
-    });
-
-    // Rotate cylinder to align with x-axis (default is y-axis)
-    mesh.duplicate_vertices();
-    mesh.compute_flat_normals();
-    mesh
-}
-
 /// Toggle fullscreen on F11
 fn toggle_fullscreen(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut windows: Query<&mut Window>,
 ) {
     if keyboard.just_pressed(KeyCode::F11) {
@@ -228,11 +208,11 @@ fn load_demo_trajectory(mut load_events: EventWriter<LoadFileEvent>, sim_data: R
 
 /// Simple UI example showing system status
 fn ui_example(
-    mut contexts: egui::Contexts,
+    mut contexts: bevy_egui::EguiContexts,
     sim_data: Res<SimulationData>,
     atom_entities: Res<gumol_viz_engine::systems::spawning::AtomEntities>,
 ) {
-    egui::Window::new("Gumol Viz Engine").show(contexts.ctx_mut(), |ui| {
+    bevy_egui::egui::Window::new("Gumol Viz Engine").show(contexts.ctx_mut(), |ui| {
         ui.heading("System Status");
         ui.separator();
 

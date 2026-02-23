@@ -7,8 +7,8 @@
 - [x] Create detailed next steps plan
 
 ## Phase 1: File Loading & Scene Management (Priority: HIGH)
-- [ ] Implement `systems/loading.rs` - File loading system for XYZ/PDB files
-- [ ] Implement `systems/spawning.rs` - Atom entity spawning from trajectory data
+- [x] Implement `systems/loading.rs` - File loading system for XYZ/PDB files
+- [x] Implement `systems/spawning.rs` - Atom entity spawning from trajectory data
 - [ ] Add `SimulationData` resource to store loaded trajectory
 - [ ] Create `FileHandle` resource to track currently loaded file
 - [ ] Add system to parse file and spawn atom entities on startup
