@@ -120,63 +120,142 @@ pub struct BondsSpawnedEvent {
 #[derive(Event, Debug)]
 pub struct BondsDespawnedEvent;
 
-/// Detect bonds between atoms based on distance
-pub fn detect_bonds(
+/// Helper struct to collect atom data without borrow conflicts
+#[derive(Clone, Debug)]
+struct AtomDataCached {
+    id: u32,
+    entity: Entity,
+    element: Element,
+    position: Vec3,
+    residue_id: u32,
+}
+
+/// Detect bonds and collect atom positions
+fn detect_and_collect_bonds(
     atom_entities: Res<crate::systems::spawning::AtomEntities>,
     config: Res<BondDetectionConfig>,
     atom_query: Query<&Atom>,
-) -> Vec<BondData> {
+) -> (Vec<BondData>, Vec<AtomDataCached>) {
     if !config.enabled {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     }
 
     let mut bonds = Vec::new();
+    let mut atom_data = Vec::new();
 
     // Get all atom IDs
     let atom_ids: Vec<u32> = atom_entities.entities.keys().copied().collect();
 
-    // Detect bonds (O(n^2) naive approach - optimize for production)
-    for (i, &atom_id_a) in atom_ids.iter().enumerate() {
-        // Get atom A
-        let entity_a = match atom_entities.entities.get(&atom_id_a) {
+    // Collect atom data first
+    for atom_id in atom_ids.iter() {
+        let entity = match atom_entities.entities.get(atom_id) {
             Some(entity) => *entity,
             None => continue,
         };
 
-        let atom_a = match atom_query.get(entity_a) {
+        let atom = match atom_query.get(entity) {
             Ok(atom) => atom,
             Err(_) => continue,
         };
 
-        let pos_a = atom_a.position;
+        atom_data.push(AtomDataCached {
+            id: *atom_id,
+            entity,
+            element: atom.element,
+            position: atom.position,
+            residue_id: atom.residue_id,
+        });
+    }
 
-        // Check against all other atoms
-        for &atom_id_b in atom_ids.iter().skip(i + 1) {
-            // Get atom B
-            let entity_b = match atom_entities.entities.get(&atom_id_b) {
-                Some(entity) => *entity,
-                None => continue,
-            };
+    // Detect bonds
+    for (i, atom_data_a) in atom_data.iter().enumerate() {
+        let pos_a = atom_data_a.position;
 
-            let atom_b = match atom_query.get(entity_b) {
-                Ok(atom) => atom,
-                Err(_) => continue,
-            };
-
-            // Calculate distance
-            let pos_b = atom_b.position;
+        for atom_data_b in atom_data.iter().skip(i + 1) {
+            let pos_b = atom_data_b.position;
             let distance = pos_a.distance(pos_b);
 
             // Check if should bond
-            if config.should_bond(atom_a, atom_b, distance) {
+            if config.should_bond(
+                &Atom {
+                    id: atom_data_a.id,
+                    element: atom_data_a.element,
+                    position: pos_a,
+                    residue_id: atom_data_a.residue_id,
+                    residue_name: String::new(),
+                    chain_id: String::new(),
+                    b_factor: 0.0,
+                    occupancy: 0.0,
+                    name: String::new(),
+                },
+                &Atom {
+                    id: atom_data_b.id,
+                    element: atom_data_b.element,
+                    position: pos_b,
+                    residue_id: atom_data_b.residue_id,
+                    residue_name: String::new(),
+                    chain_id: String::new(),
+                    b_factor: 0.0,
+                    occupancy: 0.0,
+                    name: String::new(),
+                },
+                distance,
+            ) {
                 // Determine bond properties
-                let bond_order = config.determine_bond_order(atom_a, atom_b, distance);
-                let bond_type = config.determine_bond_type(atom_a, atom_b);
+                let bond_order = config.determine_bond_order(
+                    &Atom {
+                        id: atom_data_a.id,
+                        element: atom_data_a.element,
+                        position: pos_a,
+                        residue_id: atom_data_a.residue_id,
+                        residue_name: String::new(),
+                        chain_id: String::new(),
+                        b_factor: 0.0,
+                        occupancy: 0.0,
+                        name: String::new(),
+                    },
+                    &Atom {
+                        id: atom_data_b.id,
+                        element: atom_data_b.element,
+                        position: pos_b,
+                        residue_id: atom_data_b.residue_id,
+                        residue_name: String::new(),
+                        chain_id: String::new(),
+                        b_factor: 0.0,
+                        occupancy: 0.0,
+                        name: String::new(),
+                    },
+                    distance,
+                );
+                let bond_type = config.determine_bond_type(
+                    &Atom {
+                        id: atom_data_a.id,
+                        element: atom_data_a.element,
+                        position: pos_a,
+                        residue_id: atom_data_a.residue_id,
+                        residue_name: String::new(),
+                        chain_id: String::new(),
+                        b_factor: 0.0,
+                        occupancy: 0.0,
+                        name: String::new(),
+                    },
+                    &Atom {
+                        id: atom_data_b.id,
+                        element: atom_data_b.element,
+                        position: pos_b,
+                        residue_id: atom_data_b.residue_id,
+                        residue_name: String::new(),
+                        chain_id: String::new(),
+                        b_factor: 0.0,
+                        occupancy: 0.0,
+                        name: String::new(),
+                    },
+                );
 
                 // Create bond data
                 let bond_data = BondData::new(
-                    atom_id_a,
-                    atom_id_b,
+                    atom_data_a.id,
+                    atom_data_b.id,
                     bond_type,
                     bond_order,
                     distance,
@@ -188,7 +267,7 @@ pub fn detect_bonds(
     }
 
     info!("Detected {} bonds", bonds.len());
-    bonds
+    (bonds, atom_data)
 }
 
 /// Spawn bond entities from detected bonds
@@ -212,8 +291,8 @@ pub fn spawn_bonds(
         return;
     }
 
-    // Detect bonds
-    let bonds = detect_bonds(atom_entities, config, atom_query);
+    // Detect bonds and collect atom data
+    let (bonds, atom_data) = detect_and_collect_bonds(atom_entities, config, atom_query);
 
     if bonds.is_empty() {
         info!("No bonds to spawn");
@@ -227,26 +306,15 @@ pub fn spawn_bonds(
         let atom_a_id = bond_data.atom_a_id;
         let atom_b_id = bond_data.atom_b_id;
 
-        // Get atom entities
-        let entity_a = match atom_entities.entities.get(&atom_a_id) {
-            Some(entity) => *entity,
+        // Find atom positions
+        let pos_a = match atom_data.iter().find(|ad| ad.id == atom_a_id) {
+            Some(ad) => ad.position,
             None => continue,
         };
 
-        let entity_b = match atom_entities.entities.get(&atom_b_id) {
-            Some(entity) => *entity,
+        let pos_b = match atom_data.iter().find(|ad| ad.id == atom_b_id) {
+            Some(ad) => ad.position,
             None => continue,
-        };
-
-        // Get atom positions
-        let pos_a = match atom_query.get(entity_a) {
-            Ok(atom) => atom.position,
-            Err(_) => continue,
-        };
-
-        let pos_b = match atom_query.get(entity_b) {
-            Ok(atom) => atom.position,
-            Err(_) => continue,
         };
 
         // Calculate bond geometry
@@ -299,10 +367,10 @@ pub fn spawn_bonds(
                     ..default()
                 },
                 Bond {
-                    atom_a: entity_a,
-                    atom_b: entity_b,
-                    atom_a_id: atom_a_id,
-                    atom_b_id: atom_b_id,
+                    atom_a: Entity::PLACEHOLDER,
+                    atom_b: Entity::PLACEHOLDER,
+                    atom_a_id,
+                    atom_b_id,
                     bond_type: bond_data.bond_type,
                     order: bond_data.order,
                     length: bond_length,

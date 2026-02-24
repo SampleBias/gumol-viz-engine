@@ -4,6 +4,7 @@ pub mod loading;
 pub mod spawning;
 pub mod timeline;
 pub mod bonds;
+pub mod visualization;
 
 use bevy::prelude::*;
 
@@ -13,6 +14,7 @@ pub fn register(app: &mut App) {
     spawning::register(app);
     timeline::register(app);
     bonds::register(app);
+    visualization::register(app);
 
     info!("Systems module registered");
 }

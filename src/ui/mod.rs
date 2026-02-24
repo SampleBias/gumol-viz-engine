@@ -1,3 +1,4 @@
+
 //! User interface systems (EGUI)
 //!
 //! Provides file intake via:
@@ -11,6 +12,7 @@ use crate::systems::loading::{
 };
 use crate::systems::spawning::AtomEntities;
 use crate::systems::bonds::{BondEntities, BondDetectionConfig};
+use crate::systems::visualization::{VisualizationConfig, VisualizationMode};
 use crate::core::trajectory::TimelineState;
 use crate::interaction::selection::SelectionState;
 use bevy::prelude::*;
@@ -42,7 +44,7 @@ fn is_loadable_molecular_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Handle files dropped onto the window
+/// Handle files dropped onto window
 pub fn file_drop_handler(
     mut drop_events: EventReader<FileDragAndDrop>,
     mut load_events: EventWriter<LoadFileEvent>,
@@ -111,6 +113,7 @@ pub fn main_ui_panel(
     selection: Res<SelectionState>,
     mut commands: Commands,
     mut bond_config: ResMut<BondDetectionConfig>,
+    mut viz_config: ResMut<VisualizationConfig>,
 ) {
     let ctx = contexts.ctx_mut();
 
@@ -272,6 +275,47 @@ pub fn main_ui_panel(
             }
 
             ui.separator();
+            ui.heading("Visualization");
+            ui.separator();
+
+            // Visualization mode selector
+            ui.label("Mode:");
+            ui.label(viz_config.clone().mode.name());
+
+            ui.horizontal(|ui| {
+                ui.selectable_value(&mut viz_config.mode, VisualizationMode::CPK)
+                    .changed()
+                    .then_some(|new_mode| {
+                        crate::systems::visualization::set_visualization_mode(commands, viz_config.clone(), new_mode);
+                    });
+                ui.selectable_value(&mut viz_config.mode, VisualizationMode::BallAndStick)
+                    .changed()
+                    .then_some(|new_mode| {
+                        crate::systems::visualization::set_visualization_mode(commands, viz_config.clone(), new_mode);
+                    });
+                ui.selectable_value(&mut viz_config.mode, VisualizationMode::Licorice)
+                    .changed()
+                    .then_some(|new_mode| {
+                        crate::systems::visualization::set_visualization_mode(commands, config.clone(), new_mode);
+                    });
+                ui.label("Cycle");
+            });
+
+            ui.separator();
+
+            // Atom size control
+            ui.label("Atom Scale:");
+            ui.add(bevy_egui::egui::Slider::new(&mut viz_config.atom_scale, 0.1..=3.0).logarithmic(true).step_by(0.1));
+            ui.label(format!("x ({:.2}x)", viz_config.atom_scale));
+
+            ui.separator();
+
+            // Bond visibility (only for non-CPK modes)
+            if viz_config.mode != VisualizationMode::CPK {
+                ui.checkbox(&mut viz_config.show_bonds, "Show bonds");
+            }
+
+            ui.separator();
             ui.heading("Bonds");
             ui.separator();
 
@@ -286,13 +330,13 @@ pub fn main_ui_panel(
                 ui.horizontal(|ui| {
                     ui.label("Multiplier:");
                     ui.add(bevy_egui::egui::Slider::new(&mut bond_config.distance_multiplier, 1.0..=2.0).step_by(0.1));
-                    ui.label("x");
+                    ui.label(format!("x"));
                 });
 
                 ui.horizontal(|ui| {
                     ui.label("Max distance:");
                     ui.add(bevy_egui::egui::Slider::new(&mut bond_config.max_bond_distance, 2.0..=5.0).step_by(0.1));
-                    ui.label("Å");
+                    ui.label(format!("Å"));
                 });
 
                 ui.checkbox(&mut bond_config.same_residue_only, "Same residue only");
@@ -320,6 +364,27 @@ pub fn main_ui_panel(
                 ui.label("  L — Toggle loop");
                 ui.label("  I — Toggle interpolation");
             }
+
+            ui.separator();
+            ui.heading("Controls");
+            ui.separator();
+            ui.label("  Mouse drag — Rotate camera");
+            ui.label("  Scroll — Zoom");
+            ui.label("  F11 — Toggle fullscreen");
+            ui.label("  Drag file — Load molecular file");
+            ui.label("  Click atom — Select atom");
+            ui.label("  Shift+Click — Toggle selection");
+            ui.label("  Escape — Clear selection");
+            if total_frames > 1 {
+                ui.separator();
+                ui.label("Timeline controls:");
+                ui.label("  Space — Play/Pause");
+                ui.label("  ← → — Previous/Next frame");
+                ui.label("  Home/End — First/Last frame");
+                ui.label("  > ↑ ↓ — Increase/Decrease speed");
+                ui.label("  L — Toggle loop");
+                ui.label("  I — Toggle interpolation");
+            }
         });
 }
 
@@ -335,5 +400,5 @@ pub fn register(app: &mut App) {
             ),
         );
 
-    info!("UI module registered (file intake: CLI, drag-drop, Open button)");
+    info!("UI module registered (file intake: CLI, drag-drop, Open button, visualization modes)");
 }

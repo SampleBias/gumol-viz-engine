@@ -354,3 +354,72 @@ Phase 3 (Atom Selection) is now complete. Next priorities:
 1. **Test single and multi-atom selection**
 2. **Implement Phase 4**: Bond Detection & Rendering
 3. **Implement Phase 5**: Visualization Modes
+
+## 2026-02-23 17:00 - Phase 4 Complete: Bond Detection & Rendering
+- **Fixed Rust borrow checker issues** in \`src/systems/bonds.rs\`:
+  - Created \`AtomDataCached\` helper struct to avoid multiple borrows
+  - Separated bond detection into \`detect_and_collect_bonds()\` function
+  - Fixed \`BondOrder\` enum and related type conversions
+  - Fixed \`Bond\` component to include atom IDs for efficient lookups
+  - Fixed \`BondData\` signature to include all required fields
+  - Resolved ECS query conflicts by collecting data first, then spawning
+- **Created comprehensive bond detection system** (500+ lines):
+  - \`BondEntities\` resource - tracks bond entities
+  - \`BondDetectionConfig\` resource - configurable detection settings
+  - \`BondSpawnedEvent\` / \`BondDespawnedEvent\` - lifecycle events
+  - \`detect_and_collect_bonds()\` - O(n²) distance-based bond detection
+  - \`spawn_bonds()\` - creates cylindrical mesh entities for bonds
+  - \`update_bond_positions()\` - updates transforms during animation
+  - \`despawn_all_bonds()\` - cleanup on new file load
+  - \`spawn_bonds_on_load()\` - auto-spawn when atoms loaded
+  - \`clear_bonds_on_load()\` - auto-clear on new file load
+- **Updated core bond structures**:
+  - Added \`BondOrder\` enum (Single, Double, Triple)
+  - Updated \`Bond\` component with \`atom_a_id\` and \`atom_b_id\` fields
+  - Updated \`BondData\` with \`BondOrder\` and \`length\` fields
+  - Updated \`BondLengths::get_length()\` for typical bond lengths
+- **Updated UI panel** in \`src/ui/mod.rs\`:
+  - Added Bonds section with enable/disable toggle
+  - Bond counter display
+  - Detection settings sliders (distance multiplier, max distance)
+  - Same residue only checkbox
+
+### Bond Detection Features
+**Distance-based detection:**
+- Configurable distance thresholds (min: 0.5Å, max: 3.0Å, multiplier: 1.2x)
+- Van der Waals radius check (VDW sum × multiplier)
+- Same residue constraint option
+- Bond order detection based on distance thresholds
+  - Triple bond: distance < expected × 0.9
+  - Double bond: distance < expected × 0.95
+  - Single bond: otherwise
+
+**Bond type classification:**
+- Covalent (H, C, N, O)
+- Disulfide (S-S)
+- Ionic (Mg-O, Ca-O)
+- Coordinate (Fe-S)
+- Default fallback to Covalent
+
+**Bond rendering:**
+- Cylindrical mesh generation with proper rotation
+- Gray material for all bonds
+- Automatic position updates during timeline animation
+- Midpoint-based positioning
+
+### Files Created/Modified This Phase
+- **New**: \`src/systems/bonds.rs\` (500+ lines)
+- **Modified**: \`src/core/bond.rs\` (BondOrder, Bond fields)
+- **Modified**: \`src/systems/mod.rs\` (bonds module registration)
+- **Modified**: \`src/ui/mod.rs\` (Bonds UI controls)
+- **Modified**: \`tasks/todo.md\` (marked Phase 4 tasks complete)
+- **Modified**: \`docs/activity.md\` (this entry)
+
+### Next Steps
+Phase 4 (Bond Detection & Rendering) is now complete. Next priorities:
+1. **Test bond detection** with demo_trajectory.xyz
+2. **Test with larger molecules** (proteins, DNA)
+3. **Implement Phase 5**: Visualization Modes
+4. **Implement Phase 6**: Measurement Tools
+
+---

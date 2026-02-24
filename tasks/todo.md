@@ -30,10 +30,10 @@
 - [ ] Test single and multi-atom selection
 
 ## Phase 4: Bond Detection & Rendering (Priority: MEDIUM)
-- [ ] Implement `systems/bonds.rs` - Distance-based bond detection
-- [ ] Create bond entity spawning system
-- [ ] Generate bond mesh cylinders between atoms
-- [ ] Add bond rendering with proper materials
+- [x] Implement `systems/bonds.rs` - Distance-based bond detection
+- [x] Create bond entity spawning system
+- [x] Generate bond mesh cylinders between atoms
+- [x] Add bond rendering with proper materials
 - [ ] Implement bond order detection (single/double/triple)
 - [ ] Test bond detection on protein structures
 
