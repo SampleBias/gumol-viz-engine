@@ -46,22 +46,24 @@ gumol-viz-engine/
 - **Element System**: All 118 elements with CPK colors, van der Waals radii, atomic masses
 - **Mesh Generation**: Basic sphere (atom) and cylinder (bond) mesh generation
 - **Bevy Plugin Structure**: GumolVizPlugin with module registration
+- **File Loading System**: Complete event-driven loading system with CLI, drag-drop, and file picker support
+- **Atom Spawning System**: Entity spawning from trajectory data with position updates
+- **Timeline & Animation**: Complete playback system with interpolation, speed control, keyboard/UI controls
+- **UI System**: EGUI-based interface with file loading, status display, and timeline controls
 - **Demo Scene**: Water molecule (H2O) with atoms and bonds in main.rs
 
 ### 🔨 In Progress / Stubs
-- **File Loading System**: Module exists but needs implementation
-- **Entity Spawning System**: Module exists but needs implementation
-- **Timeline System**: Data structures complete, playback system needs implementation
 - **Camera Controls**: Using bevy_panorbit_camera, custom controls stubbed
 - **Atom Selection**: Module exists but raycasting selection not implemented
-- **UI Systems**: EGUI plugin added, but no UI panels implemented
-- **Export Systems**: Module structure exists, no implementations
+- **Bond Rendering**: Bond detection system not yet implemented
+- **Visualization Modes**: Only basic CPK rendering implemented
+- **Measurement Tools**: Distance/angle/dihedral measurement not implemented
+- **Export Systems**: Screenshot/video export not implemented
 
 ### ❌ Not Implemented
 - Bond detection and rendering
-- Timeline playback animation
 - Atom interaction (raycasting, selection highlighting)
-- Multiple visualization modes (CPK, ball-and-stick, licorice)
+- Multiple visualization modes (ball-and-stick, licorice)
 - Measurement tools (distance, angle, dihedral)
 - Export functionality (screenshots, videos)
 - Secondary file formats (GRO, DCD, mmCIF)
@@ -104,21 +106,24 @@ The main application currently shows:
 
 ## Development Status
 
-### Current Phase: Foundation Complete
+### Current Phase: Timeline & Animation Complete
 - ✅ Project structure established
 - ✅ Dependencies configured in Cargo.toml
 - ✅ Core data structures implemented
 - ✅ Primary file parsers (XYZ, PDB) working
 - ✅ Basic mesh generation functional
 - ✅ Bevy app and demo scene working
+- ✅ File loading system (CLI, drag-drop, file picker)
+- ✅ Atom spawning system with position updates
+- ✅ Timeline & Animation system with interpolation
+- ✅ UI system with file loading and timeline controls
 
-### Next Priority Phase: System Implementation
+### Next Priority Phase: Interaction & Visualization
 According to `tasks/todo.md`, the next priorities are:
-1. **File Loading System** - Connect parsers to Bevy scene loading
-2. **Timeline/Animation** - Implement frame playback
-3. **Atom Selection** - Add raycasting interaction
-4. **Bond Rendering** - Display bonds between atoms
-5. **Visualization Modes** - Add different rendering styles
+1. **Atom Selection** - Add raycasting interaction (Phase 3)
+2. **Bond Detection & Rendering** - Display bonds between atoms (Phase 4)
+3. **Visualization Modes** - Add different rendering styles (Phase 5)
+4. **Measurement Tools** - Distance, angle, dihedral tools (Phase 6)
 
 ### Task Tracking
 - See `tasks/todo.md` for detailed task breakdown and progress

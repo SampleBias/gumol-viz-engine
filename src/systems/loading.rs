@@ -293,6 +293,21 @@ pub fn handle_load_file_events(
     }
 }
 
+/// Load a file provided via CLI argument
+pub fn load_cli_file(
+    cli_arg: Res<CliFileArg>,
+    mut load_events: EventWriter<LoadFileEvent>,
+) {
+    if let Some(ref path) = cli_arg.0 {
+        if path.exists() {
+            info!("Loading CLI-provided file: {:?}", path);
+            load_events.send(LoadFileEvent { path: path.clone() });
+        } else {
+            warn!("CLI file not found: {:?}", path);
+        }
+    }
+}
+
 /// Startup system to load a default file (optional)
 pub fn load_default_file(
     mut commands: Commands,

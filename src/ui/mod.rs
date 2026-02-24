@@ -10,10 +10,11 @@ use crate::systems::loading::{
     CliFileArg, FileLoadErrorEvent, LoadFileEvent, SimulationData,
 };
 use crate::systems::spawning::AtomEntities;
+use crate::core::trajectory::TimelineState;
 use bevy::prelude::*;
 use bevy::window::FileDragAndDrop;
+use crossbeam_channel;
 use std::path::Path;
-use std::sync::mpsc;
 
 /// Supported molecular file extensions for filtering
 const SUPPORTED_EXTENSIONS: &[&str] = &["xyz", "pdb", "gro", "dcd", "cif", "mmcif", "mcif"];
@@ -25,7 +26,7 @@ const LOADABLE_EXTENSIONS: &[&str] = &["xyz", "pdb"];
 #[derive(Resource, Default)]
 pub struct FilePickerState {
     /// Receiver for file path from dialog thread (None when no dialog pending)
-    receiver: Option<mpsc::Receiver<Option<std::path::PathBuf>>>,
+    receiver: Option<crossbeam_channel::Receiver<Option<std::path::PathBuf>>>,
 }
 
 /// Check if a path has a supported/loadable molecular format
@@ -84,11 +85,11 @@ pub fn file_picker_poll(
             Ok(None) => {
                 // User cancelled dialog
             }
-            Err(mpsc::TryRecvError::Empty) => {
+            Err(crossbeam_channel::TryRecvError::Empty) => {
                 // Still waiting for user - put receiver back
                 picker_state.receiver = Some(receiver);
             }
-            Err(mpsc::TryRecvError::Disconnected) => {
+            Err(crossbeam_channel::TryRecvError::Disconnected) => {
                 // Thread finished without sending (shouldn't happen)
             }
         }
@@ -103,6 +104,7 @@ pub fn main_ui_panel(
     cli_arg: Res<CliFileArg>,
     mut picker_state: ResMut<FilePickerState>,
     mut load_errors: EventReader<FileLoadErrorEvent>,
+    mut timeline: ResMut<TimelineState>,
 ) {
     let ctx = contexts.ctx_mut();
 
@@ -121,7 +123,7 @@ pub fn main_ui_panel(
                 .add_enabled(!dialog_pending, bevy_egui::egui::Button::new("📂 Open file..."))
                 .clicked()
             {
-                let (tx, rx) = mpsc::channel();
+                let (tx, rx) = crossbeam_channel::unbounded();
                 picker_state.receiver = Some(rx);
 
                 std::thread::spawn(move || {
@@ -180,12 +182,88 @@ pub fn main_ui_panel(
             }
 
             ui.separator();
+            ui.heading("Timeline");
+            ui.separator();
+
+            let total_frames = sim_data.num_frames();
+            if total_frames > 1 {
+                ui.label(format!("Frame: {} / {}", timeline.current_frame + 1, total_frames));
+                ui.label(format!("Time: {:.2} ps", timeline.simulation_time(sim_data.trajectory.time_step) / 1000.0));
+
+                // Progress bar
+                let progress = timeline.progress();
+                let mut frame_value = timeline.current_frame as f32;
+                if ui.add(
+                    bevy_egui::egui::Slider::new(&mut frame_value, 0.0..=(total_frames - 1) as f32)
+                        .integer()
+                        .step_by(1.0)
+                        .show_value(false)
+                ).changed() {
+                    // Slider dragged - update frame
+                    timeline.goto_frame(frame_value as usize);
+                    timeline.pause();
+                }
+
+                // Playback controls
+                ui.horizontal(|ui| {
+                    // Play/Pause button
+                    if ui.button(if timeline.is_playing { "⏸ Pause" } else { "▶ Play" }).clicked() {
+                        timeline.toggle_playback();
+                    }
+
+                    // Stop button
+                    if ui.button("⏹ Stop").clicked() {
+                        timeline.stop();
+                    }
+
+                    // Previous frame
+                    if ui.button("⏮").clicked() {
+                        timeline.pause();
+                        timeline.previous_frame();
+                    }
+
+                    // Next frame
+                    if ui.button("⏭").clicked() {
+                        timeline.pause();
+                        timeline.next_frame();
+                    }
+                });
+
+                // Playback speed
+                ui.horizontal(|ui| {
+                    ui.label("Speed:");
+                    ui.add(bevy_egui::egui::Slider::new(&mut timeline.playback_speed, 0.1..=5.0).logarithmic(true).step_by(0.1));
+                    ui.label(format!("x"));
+                });
+
+                // Options
+                ui.horizontal(|ui| {
+                    if ui.checkbox(&mut timeline.loop_playback, "Loop").changed() {}
+                    if ui.checkbox(&mut timeline.interpolate, "Interpolate").changed() {}
+                });
+            } else if total_frames == 1 {
+                ui.label("Single frame trajectory");
+            } else {
+                ui.label("No trajectory loaded");
+            }
+
+            ui.separator();
             ui.heading("Controls");
             ui.separator();
             ui.label("  Mouse drag — Rotate camera");
             ui.label("  Scroll — Zoom");
             ui.label("  F11 — Toggle fullscreen");
             ui.label("  Drag file — Load molecular file");
+            if total_frames > 1 {
+                ui.separator();
+                ui.label("Timeline controls:");
+                ui.label("  Space — Play/Pause");
+                ui.label("  ← → — Previous/Next frame");
+                ui.label("  Home/End — First/Last frame");
+                ui.label("  ↑ ↓ — Increase/Decrease speed");
+                ui.label("  L — Toggle loop");
+                ui.label("  I — Toggle interpolation");
+            }
         });
 }
 

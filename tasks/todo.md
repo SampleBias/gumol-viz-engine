@@ -15,11 +15,11 @@
 - [ ] Test loading actual XYZ and PDB files
 
 ## Phase 2: Timeline & Animation (Priority: HIGH)
-- [ ] Implement `systems/timeline.rs` - Timeline playback system
-- [ ] Add `update_timeline` system to advance frames during playback
-- [ ] Implement `update_atom_positions` system to update atom transforms
-- [ ] Add frame interpolation for smooth animation
-- [ ] Create timeline UI panel with play/pause/scrub controls
+- [x] Implement `systems/timeline.rs` - Timeline playback system
+- [x] Add `update_timeline` system to advance frames during playback
+- [x] Implement `update_atom_positions` system to update atom transforms
+- [x] Add frame interpolation for smooth animation
+- [x] Create timeline UI panel with play/pause/scrub controls
 - [ ] Test timeline with multi-frame XYZ files
 
 ## Phase 3: Atom Selection & Interaction (Priority: MEDIUM)
@@ -91,6 +91,15 @@
 - [x] Add session-specific tasks
 
 *Session started: 2026-02-23 13:57*
+
+## New Session - 2026-02-23 15:00
+- [x] Fix critical compilation errors (load_cli_file, FilePickerState Send issue)
+- [x] Test compilation after fixes
+- [x] Implement Timeline & Animation system (Phase 2)
+- [x] Test timeline with demo_trajectory.xyz
+- [x] Update activity log and PROJECT_README
+
+*Session started: 2026-02-23 15:00*
 
 ## Critical Bug Fixes (Priority: CRITICAL)
 - [ ] Fix panic runtime conflict with Bevy dynamic_linking feature

@@ -82,6 +82,9 @@ uuid = { version = "1.8", features = ["v4"] }
 # Native file dialogs
 rfd = "0.15"
 
+# Async channels (Send + Sync receivers)
+crossbeam-channel = "0.5"
+
 [dev-dependencies]
 criterion = "0.5"      # Benchmarking
 proptest = "1.5"       # Property-based testing
