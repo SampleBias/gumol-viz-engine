@@ -12,10 +12,14 @@ pub struct Bond {
     pub atom_a: Entity,
     /// Second atom entity
     pub atom_b: Entity,
+    /// First atom ID (for position lookups)
+    pub atom_a_id: u32,
+    /// Second atom ID (for position lookups)
+    pub atom_b_id: u32,
     /// Bond type
     pub bond_type: BondType,
-    /// Bond order (1 = single, 2 = double, 3 = triple)
-    pub order: u8,
+    /// Bond order (single, double, triple)
+    pub order: BondOrder,
     /// Bond length (in Angstroms)
     pub length: f32,
 }
@@ -25,8 +29,10 @@ impl Default for Bond {
         Self {
             atom_a: Entity::PLACEHOLDER,
             atom_b: Entity::PLACEHOLDER,
+            atom_a_id: 0,
+            atom_b_id: 0,
             bond_type: BondType::Unknown,
-            order: 1,
+            order: BondOrder::Single,
             length: 0.0,
         }
     }
@@ -43,17 +49,20 @@ pub struct BondData {
     /// Bond type
     pub bond_type: BondType,
     /// Bond order
-    pub order: u8,
+    pub order: BondOrder,
+    /// Bond length (in Angstroms)
+    pub length: f32,
 }
 
 impl BondData {
     /// Create a new bond data structure
-    pub fn new(atom_a_id: u32, atom_b_id: u32, bond_type: BondType, order: u8) -> Self {
+    pub fn new(atom_a_id: u32, atom_b_id: u32, bond_type: BondType, order: BondOrder, length: f32) -> Self {
         Self {
             atom_a_id,
             atom_b_id,
             bond_type,
             order,
+            length,
         }
     }
 }
@@ -78,13 +87,33 @@ pub enum BondType {
     Disulfide,
     /// Peptide bond
     Peptide,
+    /// Coordinate bond
+    Coordinate,
     /// Unknown bond type
     Unknown,
+}
+
+/// Bond order (single, double, triple)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect)]
+#[reflect(Debug, PartialEq, Hash)]
+pub enum BondOrder {
+    /// Single bond
+    Single = 1,
+    /// Double bond
+    Double = 2,
+    /// Triple bond
+    Triple = 3,
 }
 
 impl Default for BondType {
     fn default() -> Self {
         BondType::Unknown
+    }
+}
+
+impl Default for BondOrder {
+    fn default() -> Self {
+        BondOrder::Single
     }
 }
 
@@ -165,14 +194,20 @@ pub fn detect_bonds(
                     if distance <= max_distance {
                         // Determine bond order based on distance
                         let order = if distance < expected_length * 0.9 {
-                            3 // triple bond (very short)
+                            BondOrder::Triple
                         } else if distance < expected_length * 0.95 {
-                            2 // double bond
+                            BondOrder::Double
                         } else {
-                            1 // single bond
+                            BondOrder::Single
                         };
 
-                        bonds.push(BondData::new(id_a, id_b, BondType::Covalent, order));
+                        bonds.push(BondData::new(
+                            id_a, 
+                            id_b, 
+                            BondType::Covalent, 
+                            order, 
+                            expected_length,
+                        ));
                     }
                 }
             }

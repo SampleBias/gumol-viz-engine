@@ -10,6 +10,7 @@ use crate::systems::loading::{
     CliFileArg, FileLoadErrorEvent, LoadFileEvent, SimulationData,
 };
 use crate::systems::spawning::AtomEntities;
+use crate::systems::bonds::{BondEntities, BondDetectionConfig};
 use crate::core::trajectory::TimelineState;
 use crate::interaction::selection::SelectionState;
 use bevy::prelude::*;
@@ -102,12 +103,14 @@ pub fn main_ui_panel(
     mut contexts: bevy_egui::EguiContexts,
     sim_data: Res<SimulationData>,
     atom_entities: Res<AtomEntities>,
+    bond_entities: Res<BondEntities>,
     cli_arg: Res<CliFileArg>,
     mut picker_state: ResMut<FilePickerState>,
     mut load_errors: EventReader<FileLoadErrorEvent>,
     mut timeline: ResMut<TimelineState>,
     selection: Res<SelectionState>,
     mut commands: Commands,
+    mut bond_config: ResMut<BondDetectionConfig>,
 ) {
     let ctx = contexts.ctx_mut();
 
@@ -266,6 +269,35 @@ pub fn main_ui_panel(
                 }
             } else {
                 ui.label("No atoms selected");
+            }
+
+            ui.separator();
+            ui.heading("Bonds");
+            ui.separator();
+
+            // Enable/disable bond detection
+            ui.checkbox(&mut bond_config.enabled, "Show bonds");
+
+            if bond_config.enabled {
+                ui.label(format!("Bond count: {}", bond_entities.entities.len()));
+
+                // Distance settings
+                ui.label("Detection settings:");
+                ui.horizontal(|ui| {
+                    ui.label("Multiplier:");
+                    ui.add(bevy_egui::egui::Slider::new(&mut bond_config.distance_multiplier, 1.0..=2.0).step_by(0.1));
+                    ui.label("x");
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Max distance:");
+                    ui.add(bevy_egui::egui::Slider::new(&mut bond_config.max_bond_distance, 2.0..=5.0).step_by(0.1));
+                    ui.label("Å");
+                });
+
+                ui.checkbox(&mut bond_config.same_residue_only, "Same residue only");
+            } else {
+                ui.label("Bond detection disabled");
             }
 
             ui.separator();

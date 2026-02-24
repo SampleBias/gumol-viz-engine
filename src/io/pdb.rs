@@ -262,7 +262,11 @@ impl PDBParser {
                     atom_a,
                     atom_b,
                     BondType::Covalent,
-                    1, // Default to single bond
+                    crate::core::bond::BondOrder::Single,
+                    crate::core::bond::BondLengths::get_length(
+                        crate::core::atom::Element::C, // Placeholder
+                        crate::core::atom::Element::C, // Placeholder
+                    ),
                 ));
             }
         }
