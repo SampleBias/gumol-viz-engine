@@ -47,9 +47,10 @@ gumol-viz-engine/
 - **Mesh Generation**: Basic sphere (atom) and cylinder (bond) mesh generation
 - **Bevy Plugin Structure**: GumolVizPlugin with module registration
 - **File Loading System**: Complete event-driven loading system with CLI, drag-drop, and file picker support
-- **Atom Spawning System**: Entity spawning from trajectory data with position updates
+- **Atom Spawning System**: Entity spawning from trajectory data with position updates and picking support
 - **Timeline & Animation**: Complete playback system with interpolation, speed control, keyboard/UI controls
-- **UI System**: EGUI-based interface with file loading, status display, and timeline controls
+- **UI System**: EGUI-based interface with file loading, status display, timeline controls, and selection info
+- **Atom Selection**: Complete selection system with raycasting, highlighting, and multi-select support
 - **Demo Scene**: Water molecule (H2O) with atoms and bonds in main.rs
 
 ### 🔨 In Progress / Stubs
@@ -106,7 +107,7 @@ The main application currently shows:
 
 ## Development Status
 
-### Current Phase: Timeline & Animation Complete
+### Current Phase: Atom Selection Complete
 - ✅ Project structure established
 - ✅ Dependencies configured in Cargo.toml
 - ✅ Core data structures implemented
@@ -114,16 +115,16 @@ The main application currently shows:
 - ✅ Basic mesh generation functional
 - ✅ Bevy app and demo scene working
 - ✅ File loading system (CLI, drag-drop, file picker)
-- ✅ Atom spawning system with position updates
+- ✅ Atom spawning system with position updates and picking
 - ✅ Timeline & Animation system with interpolation
-- ✅ UI system with file loading and timeline controls
+- ✅ UI system with file loading, timeline, and selection controls
+- ✅ Atom selection system with raycasting and highlighting
 
-### Next Priority Phase: Interaction & Visualization
+### Next Priority Phase: Bond Detection & Visualization
 According to `tasks/todo.md`, the next priorities are:
-1. **Atom Selection** - Add raycasting interaction (Phase 3)
-2. **Bond Detection & Rendering** - Display bonds between atoms (Phase 4)
-3. **Visualization Modes** - Add different rendering styles (Phase 5)
-4. **Measurement Tools** - Distance, angle, dihedral tools (Phase 6)
+1. **Bond Detection & Rendering** - Detect and display bonds (Phase 4)
+2. **Visualization Modes** - Add different rendering styles (Phase 5)
+3. **Measurement Tools** - Distance, angle, dihedral tools (Phase 6)
 
 ### Task Tracking
 - See `tasks/todo.md` for detailed task breakdown and progress

@@ -6,6 +6,7 @@ use crate::core::atom::Atom;
 use crate::core::trajectory::FrameData;
 use crate::rendering;
 use bevy::prelude::*;
+use bevy_mod_picking::prelude::*;
 use std::collections::HashMap;
 
 /// Marker component for atom entities spawned by this system
@@ -83,6 +84,8 @@ fn spawn_atoms_from_frame_internal(
                         occupancy: atom_info.occupancy,
                         name: atom_info.name.clone(),
                     },
+                    // Enable picking for this atom
+                    PickableBundle::default(),
                 ))
                 .id();
 

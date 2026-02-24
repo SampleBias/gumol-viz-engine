@@ -23,10 +23,10 @@
 - [ ] Test timeline with multi-frame XYZ files
 
 ## Phase 3: Atom Selection & Interaction (Priority: MEDIUM)
-- [ ] Implement `interaction/selection.rs` - Atom selection via raycasting
-- [ ] Add `SelectionState` resource to track selected atoms
-- [ ] Implement selection highlighting (change material/color)
-- [ ] Add selection box UI in EGUI
+- [x] Implement `interaction/selection.rs` - Atom selection via raycasting
+- [x] Add `SelectionState` resource to track selected atoms
+- [x] Implement selection highlighting (change material/color)
+- [x] Add selection box UI in EGUI
 - [ ] Test single and multi-atom selection
 
 ## Phase 4: Bond Detection & Rendering (Priority: MEDIUM)

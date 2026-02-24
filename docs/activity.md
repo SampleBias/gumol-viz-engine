@@ -305,3 +305,52 @@ Phase 1 foundation is complete. Next priorities:
 - PROJECT_README.md context checked
 - Ready for continued development
 
+
+## 2026-02-23 16:00 - Implemented Phase 3: Atom Selection & Interaction
+- **Created `src/interaction/selection.rs`** (300+ lines):
+  - `SelectionState` resource - tracks selected atom entities
+  - `Selected` marker component - identifies selected atoms
+  - Selection modes: Single, Multiple, Box
+  - Selection events: AtomSelectedEvent, AtomDeselectedEvent, SelectionClearedEvent
+  - `handle_atom_selection()` - Click-based atom selection with modifiers
+  - `update_selection_highlight()` - Material-based highlighting (yellow glow)
+  - `clear_selection_on_load()` - Auto-clear on file load
+- **Updated `src/interaction/mod.rs`** to register selection systems
+- **Updated `src/systems/spawning.rs`**:
+  - Added `bevy_mod_picking::prelude` import
+  - Added `PickableBundle::default()` to spawned atoms
+- **Updated `src/ui/mod.rs`**:
+  - Added SelectionState import
+  - Added Selection UI section with atom counter
+  - Added "Clear selection" button
+  - Updated controls help text with selection shortcuts
+- **Selection features implemented**:
+  - ✅ Click to select atoms (raycasting via bevy_mod_picking)
+  - ✅ Shift/Ctrl+Click for toggle/multi-select
+  - ✅ Escape to clear selection
+  - ✅ Yellow highlighting for selected atoms (emissive glow)
+  - ✅ Selection count display in UI
+  - ✅ Auto-clear on file load
+
+### Selection Controls
+**Mouse:**
+- Click atom: Select atom (replaces previous selection)
+- Shift/Ctrl+Click: Toggle selection
+- Escape: Clear all selection
+
+**UI:**
+- Selection counter showing number of selected atoms
+- "Clear selection" button
+
+### Files Created/Modified This Phase
+- **New**: `src/interaction/selection.rs` (300+ lines)
+- **Modified**: `src/interaction/mod.rs` (registration)
+- **Modified**: `src/systems/spawning.rs` (PickableBundle)
+- **Modified**: `src/ui/mod.rs` (Selection UI)
+- **Modified**: `tasks/todo.md` (marked Phase 3 tasks complete)
+
+### Next Steps
+Phase 3 (Atom Selection) is now complete. Next priorities:
+1. **Test single and multi-atom selection**
+2. **Implement Phase 4**: Bond Detection & Rendering
+3. **Implement Phase 5**: Visualization Modes

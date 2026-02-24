@@ -11,6 +11,7 @@ use crate::systems::loading::{
 };
 use crate::systems::spawning::AtomEntities;
 use crate::core::trajectory::TimelineState;
+use crate::interaction::selection::SelectionState;
 use bevy::prelude::*;
 use bevy::window::FileDragAndDrop;
 use crossbeam_channel;
@@ -105,6 +106,8 @@ pub fn main_ui_panel(
     mut picker_state: ResMut<FilePickerState>,
     mut load_errors: EventReader<FileLoadErrorEvent>,
     mut timeline: ResMut<TimelineState>,
+    selection: Res<SelectionState>,
+    mut commands: Commands,
 ) {
     let ctx = contexts.ctx_mut();
 
@@ -248,12 +251,33 @@ pub fn main_ui_panel(
             }
 
             ui.separator();
+            ui.heading("Selection");
+            ui.separator();
+
+            ui.label(format!("Selected atoms: {}", selection.len()));
+
+            // Clear selection button
+            if !selection.is_empty() {
+                if ui.button("Clear selection").clicked() {
+                    for selected_entity in selection.entities().iter().copied().collect::<Vec<_>>() {
+                        commands.entity(selected_entity).remove::<crate::interaction::selection::Selected>();
+                    }
+                    // SelectionState will be cleared by the clear_selection_on_load system
+                }
+            } else {
+                ui.label("No atoms selected");
+            }
+
+            ui.separator();
             ui.heading("Controls");
             ui.separator();
             ui.label("  Mouse drag — Rotate camera");
             ui.label("  Scroll — Zoom");
             ui.label("  F11 — Toggle fullscreen");
             ui.label("  Drag file — Load molecular file");
+            ui.label("  Click atom — Select atom");
+            ui.label("  Shift+Click — Toggle selection");
+            ui.label("  Escape — Clear selection");
             if total_frames > 1 {
                 ui.separator();
                 ui.label("Timeline controls:");
