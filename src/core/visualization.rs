@@ -86,6 +86,21 @@ impl Default for RenderMode {
 }
 
 impl RenderMode {
+    /// Get the display name for this render mode
+    pub fn name(&self) -> &'static str {
+        match self {
+            RenderMode::CPK => "CPK (Space-filling)",
+            RenderMode::BallAndStick => "Ball-and-Stick",
+            RenderMode::Licorice => "Licorice",
+            RenderMode::Wireframe => "Wireframe",
+            RenderMode::Surface => "Surface",
+            RenderMode::Cartoon => "Cartoon",
+            RenderMode::Tube => "Tube",
+            RenderMode::Trace => "Trace",
+            RenderMode::Points => "Points",
+        }
+    }
+
     /// Get the atom scale factor for this render mode
     pub fn atom_scale(&self) -> f32 {
         match self {
@@ -315,6 +330,33 @@ impl ColorPalette {
     }
 }
 
+/// Visualization configuration resource
+#[derive(Resource, Clone, Serialize, Deserialize, Debug)]
+pub struct VisualizationConfig {
+    /// Current rendering mode
+    pub render_mode: RenderMode,
+    /// Atom size multiplier (0.1 to 2.0)
+    pub atom_scale: f32,
+    /// Bond thickness multiplier (0.1 to 3.0)
+    pub bond_scale: f32,
+    /// Show bonds flag
+    pub show_bonds: bool,
+    /// Show atoms flag
+    pub show_atoms: bool,
+}
+
+impl Default for VisualizationConfig {
+    fn default() -> Self {
+        Self {
+            render_mode: RenderMode::default(),
+            atom_scale: 1.0,
+            bond_scale: 1.0,
+            show_bonds: true,
+            show_atoms: true,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -337,5 +379,15 @@ mod tests {
         let ala_color = ColorPalette::residue_color("ALA");
         let gly_color = ColorPalette::residue_color("GLY");
         assert!(ala_color != gly_color);
+    }
+
+    #[test]
+    fn test_visualization_config_default() {
+        let config = VisualizationConfig::default();
+        assert_eq!(config.render_mode, RenderMode::CPK);
+        assert_eq!(config.atom_scale, 1.0);
+        assert_eq!(config.bond_scale, 1.0);
+        assert!(config.show_bonds);
+        assert!(config.show_atoms);
     }
 }

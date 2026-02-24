@@ -6,13 +6,13 @@
 //! - Drag-and-drop onto window
 //! - Open button with native file dialog
 
+use crate::core::visualization::{RenderMode, VisualizationConfig};
 use crate::io::FileFormat;
 use crate::systems::loading::{
     CliFileArg, FileLoadErrorEvent, LoadFileEvent, SimulationData,
 };
 use crate::systems::spawning::AtomEntities;
 use crate::systems::bonds::{BondEntities, BondDetectionConfig};
-use crate::systems::visualization::{VisualizationConfig, VisualizationMode};
 use crate::core::trajectory::TimelineState;
 use crate::interaction::selection::SelectionState;
 use bevy::prelude::*;
@@ -280,40 +280,43 @@ pub fn main_ui_panel(
 
             // Visualization mode selector
             ui.label("Mode:");
-            ui.label(viz_config.clone().mode.name());
-
-            ui.horizontal(|ui| {
-                ui.selectable_value(&mut viz_config.mode, VisualizationMode::CPK)
-                    .changed()
-                    .then_some(|new_mode| {
-                        crate::systems::visualization::set_visualization_mode(commands, viz_config.clone(), new_mode);
-                    });
-                ui.selectable_value(&mut viz_config.mode, VisualizationMode::BallAndStick)
-                    .changed()
-                    .then_some(|new_mode| {
-                        crate::systems::visualization::set_visualization_mode(commands, viz_config.clone(), new_mode);
-                    });
-                ui.selectable_value(&mut viz_config.mode, VisualizationMode::Licorice)
-                    .changed()
-                    .then_some(|new_mode| {
-                        crate::systems::visualization::set_visualization_mode(commands, config.clone(), new_mode);
-                    });
-                ui.label("Cycle");
-            });
+            bevy_egui::egui::ComboBox::from_label("")
+                .selected_text(viz_config.render_mode.name())
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::CPK, RenderMode::CPK.name());
+                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::BallAndStick, RenderMode::BallAndStick.name());
+                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::Licorice, RenderMode::Licorice.name());
+                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::Wireframe, RenderMode::Wireframe.name());
+                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::Surface, RenderMode::Surface.name());
+                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::Cartoon, RenderMode::Cartoon.name());
+                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::Tube, RenderMode::Tube.name());
+                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::Trace, RenderMode::Trace.name());
+                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::Points, RenderMode::Points.name());
+                });
 
             ui.separator();
 
             // Atom size control
             ui.label("Atom Scale:");
-            ui.add(bevy_egui::egui::Slider::new(&mut viz_config.atom_scale, 0.1..=3.0).logarithmic(true).step_by(0.1));
+            if ui.add(bevy_egui::egui::Slider::new(&mut viz_config.atom_scale, 0.1..=2.0).logarithmic(true).step_by(0.1)).changed() {
+                viz_config.atom_scale = viz_config.atom_scale.clamp(0.1, 2.0);
+            }
             ui.label(format!("x ({:.2}x)", viz_config.atom_scale));
 
             ui.separator();
 
-            // Bond visibility (only for non-CPK modes)
-            if viz_config.mode != VisualizationMode::CPK {
-                ui.checkbox(&mut viz_config.show_bonds, "Show bonds");
+            // Bond size control
+            ui.label("Bond Scale:");
+            if ui.add(bevy_egui::egui::Slider::new(&mut viz_config.bond_scale, 0.1..=3.0).logarithmic(true).step_by(0.1)).changed() {
+                viz_config.bond_scale = viz_config.bond_scale.clamp(0.1, 3.0);
             }
+            ui.label(format!("x ({:.2}x)", viz_config.bond_scale));
+
+            ui.separator();
+
+            // Visibility toggles
+            ui.checkbox(&mut viz_config.show_atoms, "Show atoms");
+            ui.checkbox(&mut viz_config.show_bonds, "Show bonds");
 
             ui.separator();
             ui.heading("Bonds");
@@ -361,27 +364,6 @@ pub fn main_ui_panel(
                 ui.label("  ← → — Previous/Next frame");
                 ui.label("  Home/End — First/Last frame");
                 ui.label("  ↑ ↓ — Increase/Decrease speed");
-                ui.label("  L — Toggle loop");
-                ui.label("  I — Toggle interpolation");
-            }
-
-            ui.separator();
-            ui.heading("Controls");
-            ui.separator();
-            ui.label("  Mouse drag — Rotate camera");
-            ui.label("  Scroll — Zoom");
-            ui.label("  F11 — Toggle fullscreen");
-            ui.label("  Drag file — Load molecular file");
-            ui.label("  Click atom — Select atom");
-            ui.label("  Shift+Click — Toggle selection");
-            ui.label("  Escape — Clear selection");
-            if total_frames > 1 {
-                ui.separator();
-                ui.label("Timeline controls:");
-                ui.label("  Space — Play/Pause");
-                ui.label("  ← → — Previous/Next frame");
-                ui.label("  Home/End — First/Last frame");
-                ui.label("  > ↑ ↓ — Increase/Decrease speed");
                 ui.label("  L — Toggle loop");
                 ui.label("  I — Toggle interpolation");
             }
