@@ -7,6 +7,9 @@
 //! - Open button with native file dialog
 
 use crate::core::visualization::{RenderMode, VisualizationConfig};
+use crate::export::gltf_export::RequestExportGltfEvent;
+use crate::export::obj::RequestExportObjEvent;
+use crate::export::screenshot::RequestScreenshotEvent;
 use crate::io::FileFormat;
 use crate::systems::loading::{
     CliFileArg, FileLoadErrorEvent, LoadFileEvent, SimulationData,
@@ -14,6 +17,7 @@ use crate::systems::loading::{
 use crate::systems::spawning::AtomEntities;
 use crate::systems::bonds::{BondEntities, BondDetectionConfig};
 use crate::core::trajectory::TimelineState;
+use crate::interaction::measurement::MeasurementState;
 use crate::interaction::selection::SelectionState;
 use bevy::prelude::*;
 use bevy::window::FileDragAndDrop;
@@ -30,6 +34,24 @@ const LOADABLE_EXTENSIONS: &[&str] = &["xyz", "pdb"];
 #[derive(Resource, Default)]
 pub struct FilePickerState {
     /// Receiver for file path from dialog thread (None when no dialog pending)
+    receiver: Option<crossbeam_channel::Receiver<Option<std::path::PathBuf>>>,
+}
+
+/// Resource holding receiver for async screenshot save path
+#[derive(Resource, Default)]
+pub struct ScreenshotSaveState {
+    receiver: Option<crossbeam_channel::Receiver<Option<std::path::PathBuf>>>,
+}
+
+/// Resource holding receiver for async OBJ export save path
+#[derive(Resource, Default)]
+pub struct ObjSaveState {
+    receiver: Option<crossbeam_channel::Receiver<Option<std::path::PathBuf>>>,
+}
+
+/// Resource holding receiver for async glTF export save path
+#[derive(Resource, Default)]
+pub struct GltfSaveState {
     receiver: Option<crossbeam_channel::Receiver<Option<std::path::PathBuf>>>,
 }
 
@@ -100,6 +122,63 @@ pub fn file_picker_poll(
     }
 }
 
+/// Poll for screenshot save path and send RequestScreenshotEvent
+pub fn screenshot_save_poll(
+    mut save_state: ResMut<ScreenshotSaveState>,
+    mut screenshot_events: EventWriter<RequestScreenshotEvent>,
+) {
+    if let Some(receiver) = save_state.receiver.take() {
+        match receiver.try_recv() {
+            Ok(Some(path)) => {
+                screenshot_events.send(RequestScreenshotEvent { path });
+            }
+            Ok(None) => {}
+            Err(crossbeam_channel::TryRecvError::Empty) => {
+                save_state.receiver = Some(receiver);
+            }
+            Err(crossbeam_channel::TryRecvError::Disconnected) => {}
+        }
+    }
+}
+
+/// Poll for OBJ export save path and send RequestExportObjEvent
+pub fn export_obj_save_poll(
+    mut save_state: ResMut<ObjSaveState>,
+    mut export_events: EventWriter<RequestExportObjEvent>,
+) {
+    if let Some(receiver) = save_state.receiver.take() {
+        match receiver.try_recv() {
+            Ok(Some(path)) => {
+                export_events.send(RequestExportObjEvent { path });
+            }
+            Ok(None) => {}
+            Err(crossbeam_channel::TryRecvError::Empty) => {
+                save_state.receiver = Some(receiver);
+            }
+            Err(crossbeam_channel::TryRecvError::Disconnected) => {}
+        }
+    }
+}
+
+/// Poll for glTF export save path and send RequestExportGltfEvent
+pub fn export_gltf_save_poll(
+    mut save_state: ResMut<GltfSaveState>,
+    mut export_events: EventWriter<RequestExportGltfEvent>,
+) {
+    if let Some(receiver) = save_state.receiver.take() {
+        match receiver.try_recv() {
+            Ok(Some(path)) => {
+                export_events.send(RequestExportGltfEvent { path });
+            }
+            Ok(None) => {}
+            Err(crossbeam_channel::TryRecvError::Empty) => {
+                save_state.receiver = Some(receiver);
+            }
+            Err(crossbeam_channel::TryRecvError::Disconnected) => {}
+        }
+    }
+}
+
 /// Main UI panel: status, Open button, controls, error display
 pub fn main_ui_panel(
     mut contexts: bevy_egui::EguiContexts,
@@ -108,9 +187,13 @@ pub fn main_ui_panel(
     bond_entities: Res<BondEntities>,
     cli_arg: Res<CliFileArg>,
     mut picker_state: ResMut<FilePickerState>,
+    mut screenshot_state: ResMut<ScreenshotSaveState>,
+    mut obj_save_state: ResMut<ObjSaveState>,
+    mut gltf_save_state: ResMut<GltfSaveState>,
     mut load_errors: EventReader<FileLoadErrorEvent>,
     mut timeline: ResMut<TimelineState>,
-    selection: Res<SelectionState>,
+    mut selection: ResMut<SelectionState>,
+    measurements: Res<MeasurementState>,
     mut commands: Commands,
     mut bond_config: ResMut<BondDetectionConfig>,
     mut viz_config: ResMut<VisualizationConfig>,
@@ -261,6 +344,35 @@ pub fn main_ui_panel(
             ui.separator();
 
             ui.label(format!("Selected atoms: {}", selection.len()));
+            if selection.len() < 2 {
+                ui.label(bevy_egui::egui::RichText::new("Shift+Click to add atoms for measurements").small());
+            }
+
+            // Measurement display
+            if selection.len() >= 2 {
+                if let Some(d) = measurements.distance {
+                    ui.label(
+                        bevy_egui::egui::RichText::new(format!("Distance: {:.3} Å", d))
+                            .color(bevy_egui::egui::Color32::from_rgb(100, 200, 100)),
+                    );
+                }
+            }
+            if selection.len() >= 3 {
+                if let Some(a) = measurements.angle {
+                    ui.label(
+                        bevy_egui::egui::RichText::new(format!("Angle: {:.2}°", a))
+                            .color(bevy_egui::egui::Color32::from_rgb(100, 200, 100)),
+                    );
+                }
+            }
+            if selection.len() >= 4 {
+                if let Some(d) = measurements.dihedral {
+                    ui.label(
+                        bevy_egui::egui::RichText::new(format!("Dihedral: {:.2}°", d))
+                            .color(bevy_egui::egui::Color32::from_rgb(100, 200, 100)),
+                    );
+                }
+            }
 
             // Clear selection button
             if !selection.is_empty() {
@@ -268,7 +380,7 @@ pub fn main_ui_panel(
                     for selected_entity in selection.entities().iter().copied().collect::<Vec<_>>() {
                         commands.entity(selected_entity).remove::<crate::interaction::selection::Selected>();
                     }
-                    // SelectionState will be cleared by the clear_selection_on_load system
+                    selection.clear();
                 }
             } else {
                 ui.label("No atoms selected");
@@ -348,6 +460,68 @@ pub fn main_ui_panel(
             }
 
             ui.separator();
+            ui.heading("Export");
+            ui.separator();
+
+            let screenshot_pending = screenshot_state.receiver.is_some();
+            let obj_pending = obj_save_state.receiver.is_some();
+            let gltf_pending = gltf_save_state.receiver.is_some();
+            let any_export_pending = screenshot_pending || obj_pending || gltf_pending;
+
+            if ui
+                .add_enabled(!screenshot_pending, bevy_egui::egui::Button::new("📷 Screenshot..."))
+                .clicked()
+            {
+                let (tx, rx) = crossbeam_channel::unbounded();
+                screenshot_state.receiver = Some(rx);
+
+                std::thread::spawn(move || {
+                    let result = rfd::FileDialog::new()
+                        .add_filter("PNG image", &["png"])
+                        .add_filter("JPEG image", &["jpg", "jpeg"])
+                        .set_file_name("gumol_screenshot.png")
+                        .save_file();
+                    let _ = tx.send(result);
+                });
+            }
+
+            if ui
+                .add_enabled(!obj_pending, bevy_egui::egui::Button::new("📦 Export OBJ..."))
+                .clicked()
+            {
+                let (tx, rx) = crossbeam_channel::unbounded();
+                obj_save_state.receiver = Some(rx);
+
+                std::thread::spawn(move || {
+                    let result = rfd::FileDialog::new()
+                        .add_filter("Wavefront OBJ", &["obj"])
+                        .set_file_name("molecule.obj")
+                        .save_file();
+                    let _ = tx.send(result);
+                });
+            }
+
+            if ui
+                .add_enabled(!gltf_pending, bevy_egui::egui::Button::new("📦 Export glTF..."))
+                .clicked()
+            {
+                let (tx, rx) = crossbeam_channel::unbounded();
+                gltf_save_state.receiver = Some(rx);
+
+                std::thread::spawn(move || {
+                    let result = rfd::FileDialog::new()
+                        .add_filter("glTF 2.0 (JSON + embedded buffer)", &["gltf"])
+                        .set_file_name("molecule.gltf")
+                        .save_file();
+                    let _ = tx.send(result);
+                });
+            }
+
+            if any_export_pending {
+                ui.label(bevy_egui::egui::RichText::new("Choosing save location...").italics());
+            }
+
+            ui.separator();
             ui.heading("Controls");
             ui.separator();
             ui.label("  Mouse drag — Rotate camera");
@@ -373,11 +547,17 @@ pub fn main_ui_panel(
 /// Register all UI systems
 pub fn register(app: &mut App) {
     app.init_resource::<FilePickerState>()
+        .init_resource::<ScreenshotSaveState>()
+        .init_resource::<ObjSaveState>()
+        .init_resource::<GltfSaveState>()
         .add_systems(
             Update,
             (
                 file_drop_handler,
                 file_picker_poll,
+                screenshot_save_poll,
+                export_obj_save_poll,
+                export_gltf_save_poll,
                 main_ui_panel,
             ),
         );

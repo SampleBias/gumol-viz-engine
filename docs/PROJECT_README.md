@@ -120,11 +120,12 @@ The main application currently shows:
 - ✅ UI system with file loading, timeline, and selection controls
 - ✅ Atom selection system with raycasting and highlighting
 
-### Next Priority Phase: Bond Detection & Visualization
+### Next Priority Phase: Secondary File Formats (Phase 1 - Week 1-2)
 According to `tasks/todo.md`, the next priorities are:
-1. **Bond Detection & Rendering** - Detect and display bonds (Phase 4)
-2. **Visualization Modes** - Add different rendering styles (Phase 5)
-3. **Measurement Tools** - Distance, angle, dihedral tools (Phase 6)
+1. **GRO Parser** - GROMACS coordinate format parser
+2. **DCD Parser** - CHARMM trajectory format parser
+3. **mmCIF Parser** - macromolecular Crystallographic Information File parser
+4. **Testing** - Unit tests and integration tests for all formats
 
 ### Task Tracking
 - See `tasks/todo.md` for detailed task breakdown and progress
@@ -197,6 +198,15 @@ According to `tasks/todo.md`, the next priorities are:
 
 ## Session Update - 2026-02-23 13:57
 - **Session Started**: 2026-02-23 13:57
+- **Context Status**: Verified and up-to-date
+
+*Context automatically updated for new development session*
+
+
+---
+
+## Session Update - 2026-02-25 14:51
+- **Session Started**: 2026-02-25 14:51
 - **Context Status**: Verified and up-to-date
 
 *Context automatically updated for new development session*

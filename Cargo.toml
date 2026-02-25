@@ -85,6 +85,10 @@ rfd = "0.15"
 # Async channels (Send + Sync receivers)
 crossbeam-channel = "0.5"
 
+# glTF format for 3D export
+gltf-json = "1.4"
+base64 = "0.22"
+
 [dev-dependencies]
 criterion = "0.5"      # Benchmarking
 proptest = "1.5"       # Property-based testing

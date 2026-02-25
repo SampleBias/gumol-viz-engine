@@ -9,6 +9,8 @@ use crate::core::atom::Element;
 use crate::io::{FileFormat, IOResult};
 use crate::io::xyz::XYZParser;
 use crate::io::pdb::PDBParser;
+use crate::io::gro::GroParser;
+use crate::io::mmcif::MmcifParser;
 use bevy::prelude::*;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -140,6 +142,32 @@ fn load_file(path: &Path) -> IOResult<(Trajectory, Vec<AtomData>)> {
 
             Ok((trajectory, atom_data))
         }
+        FileFormat::GRO => {
+            let trajectory = GroParser::parse_file(path)?;
+
+            // For GRO files, we need to create atom data from the first frame
+            let atom_data = create_atom_data_from_gro(&trajectory)?;
+
+            Ok((trajectory, atom_data))
+        }
+        FileFormat::MmCIF => {
+            let trajectory = MmcifParser::parse_file(path)?;
+
+            // For mmCIF files, we need to create atom data from the first frame
+            let atom_data = create_atom_data_from_mmcif(&trajectory)?;
+
+            Ok((trajectory, atom_data))
+        }
+        FileFormat::DCD => {
+            // DCD files only contain positions, not atom data
+            // This would need to be paired with a structure file
+            let trajectory = crate::io::dcd::DcdParser::parse_file(path)?;
+
+            // Create placeholder atom data
+            let atom_data = create_placeholder_atom_data(&trajectory)?;
+
+            Ok((trajectory, atom_data))
+        }
         _ => Err(crate::io::IOError::UnsupportedFormat(format!("{:?}", format))),
     }
 }
@@ -218,6 +246,78 @@ fn create_atom_data_from_pdb(trajectory: &Trajectory) -> IOResult<Vec<AtomData>>
             atom_data.push(AtomData::new(
                 *atom_id,
                 crate::core::atom::Element::C, // Default to carbon
+                0,
+                "UNK".to_string(),
+                "A".to_string(),
+                format!("ATOM{}", atom_id),
+            ));
+        }
+    }
+
+    Ok(atom_data)
+}
+
+/// Create atom data from GRO trajectory
+fn create_atom_data_from_gro(trajectory: &Trajectory) -> IOResult<Vec<AtomData>> {
+    let mut atom_data = Vec::new();
+
+    // Parse GRO file to get element and residue information
+    if trajectory.file_path.exists() {
+        let file = File::open(&trajectory.file_path)?;
+        let reader = BufReader::new(file);
+        let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
+
+        if lines.len() >= 3 {
+            // Skip title line (0) and atom count line (1)
+            // Start from line 2 (first atom line)
+            for (i, line) in lines.iter().skip(2).take(trajectory.num_atoms).enumerate() {
+                let parsed = crate::io::gro::GroParser::parse_atom_line(line, i + 3, i)
+                    .unwrap_or_else(|_| {
+                        // Fallback to default values
+                        crate::io::gro::ParsedAtom {
+                            residue_id: 1,
+                            residue_name: "UNK".to_string(),
+                            atom_name: "X".to_string(),
+                            element: Element::Unknown,
+                            position: Vec3::ZERO,
+                            velocity: None,
+                        }
+                    });
+
+                atom_data.push(AtomData::new(
+                    i as u32,
+                    parsed.element,
+                    parsed.residue_id as u32,
+                    parsed.residue_name,
+                    "A".to_string(), // GRO doesn't have chain ID
+                    parsed.atom_name,
+                ));
+            }
+        }
+    } else {
+        // Fallback: create placeholder atom data
+        return create_placeholder_atom_data(trajectory);
+    }
+
+    Ok(atom_data)
+}
+
+/// Create atom data from mmCIF trajectory
+fn create_atom_data_from_mmcif(trajectory: &Trajectory) -> IOResult<Vec<AtomData>> {
+    // For now, create placeholder atom data
+    // In a real implementation, we'd parse the mmCIF file to get atom metadata
+    create_placeholder_atom_data(trajectory)
+}
+
+/// Create placeholder atom data (for formats without atom metadata)
+fn create_placeholder_atom_data(trajectory: &Trajectory) -> IOResult<Vec<AtomData>> {
+    let mut atom_data = Vec::new();
+
+    if let Some(first_frame) = trajectory.get_frame(0) {
+        for atom_id in first_frame.atom_ids() {
+            atom_data.push(AtomData::new(
+                *atom_id,
+                Element::Unknown,
                 0,
                 "UNK".to_string(),
                 "A".to_string(),

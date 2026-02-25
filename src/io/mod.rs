@@ -4,6 +4,9 @@
 
 pub mod xyz;
 pub mod pdb;
+pub mod gro;
+pub mod dcd;
+pub mod mmcif;
 
 use bevy::prelude::*;
 use thiserror::Error;
@@ -12,6 +15,9 @@ use thiserror::Error;
 pub fn register(app: &mut App) {
     xyz::register(app);
     pdb::register(app);
+    gro::register(app);
+    dcd::register(app);
+    mmcif::register(app);
 
     info!("IO module registered");
 }
@@ -64,7 +70,10 @@ impl FileFormat {
 
     /// Check if this format is currently loadable (parser implemented)
     pub fn is_loadable(&self) -> bool {
-        matches!(self, FileFormat::XYZ | FileFormat::PDB)
+        matches!(
+            self,
+            FileFormat::XYZ | FileFormat::PDB | FileFormat::GRO | FileFormat::MmCIF | FileFormat::DCD
+        )
     }
 
     /// Detect file format from content
@@ -83,6 +92,26 @@ impl FileFormat {
             "ATOM" | "HETATM" | "HEADER" | "TITLE" | "CRYST1" | "REMARK" | "MODEL"
         ) {
             return FileFormat::PDB;
+        }
+
+        // GRO format: check for typical GRO structure
+        // Look for lines with column-based format (5 chars, 5 chars, 5 chars, 5 chars, 8.3, 8.3, 8.3)
+        let lines: Vec<&str> = content.lines().take(10).collect();
+        if lines.len() >= 3 {
+            // Try to parse the second line as a number
+            if let Ok(_num_atoms) = lines[1].trim().parse::<u32>() {
+                // Check third line for GRO-like format
+                let third_line = lines[2];
+                // GRO lines typically have at least 44 characters
+                if third_line.len() >= 44 {
+                    return FileFormat::GRO;
+                }
+            }
+        }
+
+        // mmCIF format: starts with "data_" block
+        if first_line.starts_with("data_") {
+            return FileFormat::MmCIF;
         }
 
         FileFormat::Unknown

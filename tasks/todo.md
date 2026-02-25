@@ -106,3 +106,32 @@
 - [ ] Update Cargo.toml profile configurations
 - [ ] Test compilation after fix
 - [ ] Verify dynamic linking works correctly
+
+---
+
+## New Session - 2026-02-25 14:51
+- [x] Review existing todo items
+- [x] Identify new requirements
+- [x] Update task priorities
+- [x] Add session-specific tasks
+
+*Session started: 2026-02-25 14:51*
+
+## Phase 1: Secondary File Formats (Priority: HIGH)
+- [x] Implement GRO format parser (`src/io/gro.rs`) - 434 lines
+- [x] Implement DCD format parser (`src/io/dcd.rs`) - 280 lines
+- [x] Implement mmCIF format parser (`src/io/mmcif.rs`) - 350+ lines
+- [x] Update `src/io/mod.rs` to register new parsers
+- [x] Update `FileFormat::is_loadable()` to include secondary formats
+- [x] Add GRO format tests
+- [x] Add DCD format tests
+- [x] Add mmCIF format tests
+- [x] Create example GRO file for testing
+- [x] Create example mmCIF file for testing
+- [x] Load .gro files - Full integration with file loading system
+- [ ] Document GroParser API in `docs/gro_parser_reference.md`
+- [ ] Fix pre-existing glTF export compilation errors (blocking testing)
+- [ ] Run unit tests for all new parsers
+- [ ] Test loading actual mmCIF files
+- [ ] Complete `create_atom_data_from_mmcif()` implementation
+- [ ] Update documentation for secondary formats

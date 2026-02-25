@@ -160,26 +160,6 @@ pub fn spawn_atoms_on_load(
     }
 }
 
-/// Update atom positions from the current frame
-pub fn update_atom_positions(
-    sim_data: Res<crate::systems::loading::SimulationData>,
-    timeline: Res<crate::core::trajectory::TimelineState>,
-    mut atom_query: Query<(&SpawnedAtom, &mut Transform)>,
-) {
-    if !sim_data.loaded {
-        return;
-    }
-
-    // Get the current frame
-    if let Some(frame) = sim_data.trajectory.get_frame(timeline.current_frame) {
-        for (spawned_atom, mut transform) in atom_query.iter_mut() {
-            if let Some(position) = frame.get_position(spawned_atom.atom_id) {
-                transform.translation = position;
-            }
-        }
-    }
-}
-
 /// Calculate the center of mass of all atoms
 pub fn calculate_center_of_mass(atom_query: Query<&Transform, (With<SpawnedAtom>, Without<Camera>)>) -> Option<Vec3> {
     let mut sum = Vec3::ZERO;
@@ -197,23 +177,41 @@ pub fn calculate_center_of_mass(atom_query: Query<&Transform, (With<SpawnedAtom>
     }
 }
 
-/// Center the camera on the molecule
-pub fn center_camera_on_molecule(
-    mut camera_query: Query<&mut Transform, With<Camera>>,
-    atom_query: Query<&Transform, (With<SpawnedAtom>, Without<Camera>)>,
+/// Center the camera on the molecule when a file is loaded.
+/// Uses PanOrbitCamera's focus so the orbit target matches the molecule center.
+pub fn center_camera_on_file_load(
+    mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    sim_data: Res<crate::systems::loading::SimulationData>,
+    mut camera_query: Query<&mut bevy_panorbit_camera::PanOrbitCamera>,
 ) {
-    let center = if let Some(center) = calculate_center_of_mass(atom_query) {
-        center
-    } else {
+    if file_loaded_events.read().next().is_none() {
         return;
-    };
-
-    // Move camera to look at center
-    for mut transform in camera_query.iter_mut() {
-        transform.look_at(center, Vec3::Y);
     }
 
-    info!("Camera centered on molecule at {:?}", center);
+    // Compute center from first frame (atoms may not be spawned yet)
+    let center = if let Some(frame) = sim_data.trajectory.get_frame(0) {
+        let mut sum = Vec3::ZERO;
+        let mut count = 0;
+        for pos in frame.positions.values() {
+            sum += *pos;
+            count += 1;
+        }
+        if count > 0 {
+            Some(sum / count as f32)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    if let Some(center) = center {
+        for mut cam in camera_query.iter_mut() {
+            cam.focus = center;
+            cam.target_focus = center;
+            info!("Camera centered on molecule at {:?}", center);
+        }
+    }
 }
 
 /// Register all spawning systems
@@ -222,8 +220,7 @@ pub fn register(app: &mut App) {
         .add_event::<AtomsSpawnedEvent>()
         .add_event::<AtomsDespawnedEvent>()
         .add_systems(Update, spawn_atoms_on_load)
-        .add_systems(Update, update_atom_positions)
-        .add_systems(PostUpdate, center_camera_on_molecule);
+        .add_systems(Update, center_camera_on_file_load);
 
     info!("Spawning systems registered");
 }
