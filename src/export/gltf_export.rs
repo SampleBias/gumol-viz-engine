@@ -124,44 +124,59 @@ fn write_gltf(path: &PathBuf, data: &ExportData) -> std::io::Result<()> {
         buffers: vec![Buffer {
             byte_length: USize64::from(buffer_data.len() as u64),
             uri: Some(buffer_uri),
-            ..Default::default()
+            extensions: None,
+            extras: Default::default(),
         }],
         buffer_views: vec![
             BufferView {
                 buffer: Index::new(0),
-                byte_offset: Some(USize64::from(0)),
                 byte_length: USize64::from(pos_len as u64),
+                byte_offset: Some(USize64::from(0u64)),
+                byte_stride: None,
                 target: Some(Checked::Valid(gltf_json::buffer::Target::ArrayBuffer)),
-                ..Default::default()
+                extensions: None,
+                extras: Default::default(),
             },
             BufferView {
                 buffer: Index::new(0),
-                byte_offset: Some(USize64::from(idx_offset as u64)),
                 byte_length: USize64::from(idx_bytes.len() as u64),
+                byte_offset: Some(USize64::from(idx_offset as u64)),
+                byte_stride: None,
                 target: Some(Checked::Valid(gltf_json::buffer::Target::ElementArrayBuffer)),
-                ..Default::default()
+                extensions: None,
+                extras: Default::default(),
             },
         ],
         accessors: vec![
             Accessor {
                 buffer_view: Some(Index::new(0)),
-                byte_offset: Some(USize64::from(0)),
-                component_type: Checked::Valid(gltf_json::accessor::GenericComponentType(
-                    gltf_json::accessor::ComponentType::Float,
-                )),
+                byte_offset: Some(USize64::from(0u64)),
                 count: USize64::from((positions.len() / 3) as u64),
+                component_type: Checked::Valid(gltf_json::accessor::GenericComponentType(
+                    gltf_json::accessor::ComponentType::F32,
+                )),
+                extensions: None,
+                extras: Default::default(),
                 type_: Checked::Valid(gltf_json::accessor::Type::Vec3),
-                ..Default::default()
+                min: None,
+                max: None,
+                normalized: false,
+                sparse: None,
             },
             Accessor {
                 buffer_view: Some(Index::new(1)),
-                byte_offset: Some(USize64::from(0)),
+                byte_offset: Some(USize64::from(0u64)),
+                count: USize64::from(indices.len() as u64),
                 component_type: Checked::Valid(gltf_json::accessor::GenericComponentType(
                     gltf_json::accessor::ComponentType::U32,
                 )),
-                count: USize64::from(indices.len() as u64),
+                extensions: None,
+                extras: Default::default(),
                 type_: Checked::Valid(gltf_json::accessor::Type::Scalar),
-                ..Default::default()
+                min: None,
+                max: None,
+                normalized: false,
+                sparse: None,
             },
         ],
         meshes: vec![Mesh {
@@ -174,20 +189,25 @@ fn write_gltf(path: &PathBuf, data: &ExportData) -> std::io::Result<()> {
                     );
                     m
                 },
+                extensions: None,
+                extras: Default::default(),
                 indices: Some(Index::new(1)),
                 material: None,
                 mode: Checked::Valid(gltf_json::mesh::Mode::Triangles),
-                ..Default::default()
+                targets: None,
             }],
-            ..Default::default()
+            extensions: None,
+            extras: Default::default(),
+            weights: None,
         }],
         nodes: vec![gltf_json::Node {
             mesh: Some(Index::new(0)),
             ..Default::default()
         }],
         scenes: vec![Scene {
+            extensions: None,
+            extras: Default::default(),
             nodes: vec![Index::new(0)],
-            ..Default::default()
         }],
         scene: Some(Index::new(0)),
         ..Default::default()

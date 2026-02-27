@@ -9,9 +9,9 @@
 ## Phase 1: File Loading & Scene Management (Priority: HIGH)
 - [x] Implement `systems/loading.rs` - File loading system for XYZ/PDB files
 - [x] Implement `systems/spawning.rs` - Atom entity spawning from trajectory data
-- [ ] Add `SimulationData` resource to store loaded trajectory
-- [ ] Create `FileHandle` resource to track currently loaded file
-- [ ] Add system to parse file and spawn atom entities on startup
+- [x] Add `SimulationData` resource to store loaded trajectory
+- [x] Create `FileHandle` resource to track currently loaded file
+- [x] Add system to parse file and spawn atom entities on startup
 - [ ] Test loading actual XYZ and PDB files
 
 ## Phase 2: Timeline & Animation (Priority: HIGH)
@@ -34,41 +34,41 @@
 - [x] Create bond entity spawning system
 - [x] Generate bond mesh cylinders between atoms
 - [x] Add bond rendering with proper materials
-- [ ] Implement bond order detection (single/double/triple)
+- [x] Implement bond order detection (single/double/triple)
 - [ ] Test bond detection on protein structures
 
 ## Phase 5: Visualization Modes (Priority: MEDIUM)
-- [ ] Add `VisualizationConfig` resource with render mode settings
-- [ ] Implement CPK mode (space-filling atoms)
-- [ ] Implement Ball-and-Stick mode
-- [ ] Implement Licorice mode
-- [ ] Create UI selector for visualization modes
-- [ ] Add atom size scaling controls
+- [x] Add `VisualizationConfig` resource with render mode settings
+- [x] Implement CPK mode (space-filling atoms)
+- [x] Implement Ball-and-Stick mode
+- [x] Implement Licorice mode
+- [x] Create UI selector for visualization modes
+- [x] Add atom size scaling controls
 
 ## Phase 6: Measurement Tools (Priority: LOW)
-- [ ] Implement `interaction/measurement.rs` - Distance calculator
-- [ ] Add angle measurement tool
-- [ ] Add dihedral angle measurement
-- [ ] Create measurement UI display
+- [x] Implement `interaction/measurement.rs` - Distance calculator
+- [x] Add angle measurement tool
+- [x] Add dihedral angle measurement
+- [x] Create measurement UI display
 - [ ] Test measurements on selected atoms
 
 ## Phase 7: Export Functionality (Priority: LOW)
-- [ ] Implement `export/screenshot.rs` - PNG/JPEG screenshot capture
-- [ ] Add export UI panel
+- [x] Implement `export/screenshot.rs` - PNG/JPEG screenshot capture
+- [x] Add export UI panel
 - [ ] Test screenshot functionality
 
 ## Documentation & Examples (Priority: MEDIUM)
-- [ ] Create example XYZ file for testing
-- [ ] Create example PDB file for testing
+- [x] Create example XYZ file for testing (demo_trajectory.xyz, examples/water.gro, water.cif)
+- [x] Create example PDB file for testing (examples/1CRN.pdb — crambin from RCSB)
 - [ ] Update examples/basic_load.rs to use actual file loading
-- [ ] Update examples/xyz_viewer.rs to implement XYZ viewer
-- [ ] Update examples/pdb_viewer.rs to implement PDB viewer
+- [x] Update examples/xyz_viewer.rs to implement XYZ viewer
+- [x] Update examples/pdb_viewer.rs to implement PDB viewer
 - [ ] Add inline documentation to all systems
 - [ ] Update README with current feature status
 
 ## Testing & Quality
-- [ ] Add unit tests for loading system
-- [ ] Add unit tests for timeline system
+- [x] Add unit tests for loading system
+- [x] Add unit tests for timeline system
 - [ ] Add integration tests for full workflow
 - [ ] Performance test with 10,000 atoms
 - [ ] Performance test with 100,000 atoms
@@ -79,8 +79,8 @@
 
 ---
 *Created: 2026-02-23 12:54*
-*Last Updated: 2026-02-23 13:00*
-*Review Date: 2026-02-23*
+*Last Updated: 2026-02-27*
+*Review Date: 2026-02-27*
 
 ---
 
@@ -129,9 +129,15 @@
 - [x] Create example GRO file for testing
 - [x] Create example mmCIF file for testing
 - [x] Load .gro files - Full integration with file loading system
-- [ ] Document GroParser API in `docs/gro_parser_reference.md`
+- [x] Document GroParser API in `docs/gro_parser_reference.md` (already exists)
 - [ ] Fix pre-existing glTF export compilation errors (blocking testing)
 - [ ] Run unit tests for all new parsers
 - [ ] Test loading actual mmCIF files
-- [ ] Complete `create_atom_data_from_mmcif()` implementation
-- [ ] Update documentation for secondary formats
+- [x] Complete `create_atom_data_from_mmcif()` implementation
+- [x] Update documentation for secondary formats (`docs/SECONDARY_FORMATS.md`)
+
+---
+
+## New Session - 2026-02-27
+- [x] Complete `create_atom_data_from_mmcif()` — added `MmcifParser::parse_atom_data_from_file()`, `parse_mmcif_data()`, improved `parse_atom_data()` with alternative column names
+- [x] Create `docs/SECONDARY_FORMATS.md` — comprehensive docs for GRO, DCD, mmCIF

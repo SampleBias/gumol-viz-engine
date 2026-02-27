@@ -35,7 +35,7 @@ pub fn hex_color(hex: &str) -> Option<Color> {
     let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
     let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
 
-    Some(Color::rgb_u8(r, g, b))
+    Some(Color::srgb_u8(r, g, b))
 }
 
 /// Create a gradient from two colors
@@ -81,13 +81,13 @@ pub fn palette_color(index: usize, palette: &[Color]) -> Color {
 /// Default color palette for molecules
 pub fn default_palette() -> Vec<Color> {
     vec![
-        Color::rgb(0.9, 0.9, 0.9),  // White
-        Color::rgb(0.9, 0.1, 0.1),  // Red
-        Color::rgb(0.1, 0.1, 0.9),  // Blue
-        Color::rgb(0.1, 0.8, 0.1),  // Green
-        Color::rgb(0.9, 0.9, 0.1),  // Yellow
-        Color::rgb(0.9, 0.6, 0.1),  // Orange
-        Color::rgb(0.6, 0.1, 0.9),  // Purple
-        Color::rgb(0.1, 0.9, 0.9),  // Cyan
+        Color::srgb(0.9, 0.9, 0.9),  // White
+        Color::srgb(0.9, 0.1, 0.1),  // Red
+        Color::srgb(0.1, 0.1, 0.9),  // Blue
+        Color::srgb(0.1, 0.8, 0.1),  // Green
+        Color::srgb(0.9, 0.9, 0.1),  // Yellow
+        Color::srgb(0.9, 0.6, 0.1),  // Orange
+        Color::srgb(0.6, 0.1, 0.9),  // Purple
+        Color::srgb(0.1, 0.9, 0.9),  // Cyan
     ]
 }

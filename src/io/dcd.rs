@@ -4,11 +4,10 @@
 //! It's a fixed record-length binary file with a specific header and frame structure.
 
 use crate::core::trajectory::{FrameData, Trajectory, TrajectoryMetadata};
-use crate::core::atom::{AtomData, Element};
-use crate::io::{FileFormat, IOError, IOResult};
+use crate::core::atom::AtomData;
+use crate::io::{IOError, IOResult};
 use bevy::prelude::*;
 use byteorder::{LittleEndian, ReadBytesExt};
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -19,18 +18,18 @@ const DCD_HEADER_SIZE: usize = 224;
 const DCD_TITLE_SIZE: i32 = 80;
 
 /// DCD header structure
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct DcdHeader {
-    num_frames: i32,
-    start_step: i32,
-    skip: i32,
-    num_sets: i32,
-    delta: f32,
-    charmm: bool,
-    has_temperature: bool,
-    has_pressure: bool,
-    title: String,
-    num_atoms: i32,
+    pub num_frames: i32,
+    pub start_step: i32,
+    pub skip: i32,
+    pub num_sets: i32,
+    pub delta: f32,
+    pub charmm: bool,
+    pub has_temperature: bool,
+    pub has_pressure: bool,
+    pub title: String,
+    pub num_atoms: i32,
 }
 
 impl Default for DcdHeader {
@@ -59,55 +58,35 @@ impl DcdParser {
     /// Note: DCD files only contain position data (no atom metadata).
     /// You'll need to load atom data from a separate file (e.g., PDB, GRO, mmCIF).
     pub fn parse_file(path: &Path) -> IOResult<Trajectory> {
-        let file = File::open(path).map_err(|e| IOError::FileNotFound(path.display().to_string()))?;
-        let reader = BufReader::new(file);
-        Self::parse_reader(reader, path.to_path_buf())
+        let file = File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
+        let mut reader = BufReader::new(file);
+        Self::parse_reader(&mut reader, path.to_path_buf())
     }
 
-    /// Parse DCD format from a reader
-    pub fn parse_reader<R: Read>(reader: R, file_path: PathBuf) -> IOResult<Trajectory> {
-        let reader = BufReader::new(reader);
-        Self::parse_reader(reader, file_path)
-    }
+    /// Parse DCD format from a binary reader
+    pub fn parse_reader<R: Read>(reader: &mut R, file_path: PathBuf) -> IOResult<Trajectory> {
+        let header = Self::read_header(reader)?;
 
-    /// Parse DCD format from string content
-    pub fn parse_string(content: &str, file_path: PathBuf) -> IOResult<Trajectory> {
-        let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
-        Self::parse_lines(&lines, file_path)
-    }
-
-    /// Parse DCD format from a vector of lines
-    fn parse_lines(lines: &[String], file_path: PathBuf) -> IOResult<Trajectory> {
-        let mut line_iter = lines.iter().enumerate();
-
-        // Parse header
-        let header = Self::read_header(&mut line_iter)?;
-
-        // Calculate expected file size and number of atoms
-        let num_atoms = header.num_atoms;
-        let num_frames = header.num_frames;
-        let bytes_per_frame = 12 + num_atoms * 4 * 3 + 12; // 4 records of (4 + data + 4 + 4)
+        let num_atoms = header.num_atoms as usize;
+        let num_frames = if header.num_frames > 0 {
+            header.num_frames as usize
+        } else {
+            // 0 means read until EOF - we don't support that yet, use 1 as fallback
+            1
+        };
 
         info!(
-            "DCD: {} frames, {} atoms, {} atoms set",
+            "DCD: {} frames, {} atoms",
             num_frames,
-            num_atoms,
-            header.num_sets
+            num_atoms
         );
 
-        // Parse frames
         let mut frames = Vec::new();
         for frame_index in 0..num_frames {
-            let frame = Self::read_frame(&mut line_iter, frame_index, num_atoms)?;
+            let frame = Self::read_frame(reader, frame_index, num_atoms)?;
             frames.push(frame);
-
-            if frame_index == 0 {
-                // Update total_frames in header after first read
-                header.num_frames = frame_index + 1;
-            }
         }
 
-        // Create trajectory
         let mut metadata = TrajectoryMetadata::default();
         metadata.title = header.title.clone();
         metadata.software = if header.charmm {
@@ -135,96 +114,82 @@ impl DcdParser {
     /// from a separate file (e.g., PDB, GRO, mmCIF).
     pub fn parse_with_atom_data(
         path: &Path,
-        atom_data: &[AtomData],
+        _atom_data: &[AtomData],
     ) -> IOResult<Trajectory> {
-        let mut trajectory = Self::parse_file(path)?;
-
-        // Note: In a real implementation, we'd store atom_data in the trajectory
-        // For now, trajectory just contains positions
-        Ok(trajectory)
+        Self::parse_file(path)
     }
 
-    /// Read DCD header
+    /// Read DCD header (Fortran unformatted format)
     fn read_header<R: Read>(reader: &mut R) -> IOResult<DcdHeader> {
-        // Check magic number (84 for CHARMM)
-        let header_size = reader.read_i32::<LittleEndian>()?;
+        // First record: 4-byte size (84) + 84 bytes + 4-byte size
+        let rec1_size = reader.read_i32::<LittleEndian>()?;
 
-        if header_size != DCD_MAGIC_NUMBER {
+        if rec1_size != DCD_MAGIC_NUMBER {
             return Err(IOError::ParseError {
                 line: 0,
                 message: format!(
-                    "Invalid DCD header size: expected {}, got {}",
-                    DCD_MAGIC_NUMBER, header_size
+                    "Invalid DCD header: expected magic {}, got {}",
+                    DCD_MAGIC_NUMBER, rec1_size
                 ),
             });
         }
 
         let mut header = DcdHeader::default();
 
-        // Read CORD (CHARMM coordinates) or other identifier
+        // CORD (4 bytes)
         let mut cord = [0u8; 4];
         reader.read_exact(&mut cord)?;
-
         header.charmm = &cord == b"CORD";
 
-        // Read number of frames (can be 0, meaning read until EOF)
-        header.num_frames = reader.read_i32::<LittleEndian>()? as usize;
-
-        // Read starting timestep
+        // NSET (num frames), ISTRT, NSAVC
+        header.num_frames = reader.read_i32::<LittleEndian>()?;
         header.start_step = reader.read_i32::<LittleEndian>()?;
-
-        // Read steps between frames
         header.skip = reader.read_i32::<LittleEndian>()?;
-
-        // Read number of steps per trajectory
         header.num_sets = reader.read_i32::<LittleEndian>()?;
 
-        // Read time step between frames (in 20fs units)
-        header.delta = reader.read_f32::<LittleEndian>()?;
-
-        // Read unit flags (can be ignored)
-        let _ = reader.read_i32::<LittleEndian>()?;
-        let _ = reader.read_i32::<LittleEndian>()?;
-        let _ = reader.read_i32::<LittleEndian>()?;
-
-        // Read temperature flag
-        let temperature = reader.read_i32::<LittleEndian>()?;
-        header.has_temperature = temperature == 1;
-
-        // Read pressure flag
-        let pressure = reader.read_i32::<LittleEndian>()?;
-        header.has_pressure = pressure == 1;
-
-        // Skip padding
-        let _ = reader.read_i32::<LittleEndian>()?;
-
-        // Read title records (80 bytes each)
-        let n_title = reader.read_i32::<LittleEndian>()?;
-
-        if n_title > 0 {
-            let mut title_bytes = vec![0u8; n_title as usize];
-            reader.read_exact(&mut title_bytes)?;
-
-            let mut title = String::new();
-            for _ in 0..n_title {
-                title.push(reader.read_u8()? as char);
-            }
-            header.title = String::from_utf8_lossy(&title_bytes).trim().to_string();
+        // 5 zeros
+        for _ in 0..5 {
+            let _ = reader.read_i32::<LittleEndian>()?;
         }
 
-        // Read number of atoms
-        let num_atoms_size = reader.read_i32::<LittleEndian>()?;
+        // NATOM-NFREAT (often 0)
+        let _ = reader.read_i32::<LittleEndian>()?;
 
-        if num_atoms_size != 4 {
+        // DELTA (8 bytes, double)
+        header.delta = reader.read_f64::<LittleEndian>()? as f32;
+
+        // 9 zeros
+        for _ in 0..9 {
+            let _ = reader.read_i32::<LittleEndian>()?;
+        }
+
+        // End of first record (4 bytes)
+        let _ = reader.read_i32::<LittleEndian>()?;
+
+        // Second record: NTITLE (4-byte record with single i32)
+        let _ = reader.read_i32::<LittleEndian>()?; // record size = 4
+        let n_title = reader.read_i32::<LittleEndian>()?;
+        let _ = reader.read_i32::<LittleEndian>()?; // trailing record size
+
+        // Third record: TITLE strings (80 chars each)
+        if n_title > 0 {
+            let title_rec_size = reader.read_i32::<LittleEndian>()?; // 80 * n_title
+            let title_len = title_rec_size as usize;
+            let mut title_bytes = vec![0u8; title_len];
+            reader.read_exact(&mut title_bytes)?;
+            header.title = String::from_utf8_lossy(&title_bytes).trim().to_string();
+            let _ = reader.read_i32::<LittleEndian>()?; // trailing record size
+        }
+
+        // Fourth record: NATOM
+        let natom_rec_size = reader.read_i32::<LittleEndian>()?;
+        if natom_rec_size != 4 {
             return Err(IOError::ParseError {
                 line: 0,
-                message: format!("Invalid num_atoms size: {}, expected 4, got {}", num_atoms_size),
+                message: format!("Invalid NATOM record size: {}", natom_rec_size),
             });
         }
-
-        let num_atoms = num_atoms_size as usize;
-
-        // Skip end of header marker
+        header.num_atoms = reader.read_i32::<LittleEndian>()?;
         let _ = reader.read_i32::<LittleEndian>()?;
 
         Ok(header)
@@ -263,7 +228,7 @@ impl DcdParser {
         let ny_size = reader.read_i32::<LittleEndian>()?;
 
         if ny_size != (num_atoms * 4) as i32 {
-            return Err(IOError::Error {
+            return Err(IOError::ParseError {
                 line: 0,
                 message: format!(
                     "Invalid Y coordinate record size: expected {}, got {}",
@@ -284,7 +249,7 @@ impl DcdParser {
         let nz_size = reader.read_i32::<LittleEndian>()?;
 
         if nz_size != (num_atoms * 4) as i32 {
-            return Err(IOError::Error {
+            return Err(IOError::ParseError {
                 line: 0,
                 message: format!(
                     "Invalid Z coordinate record size: expected {}, got {}",

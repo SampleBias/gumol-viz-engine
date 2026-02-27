@@ -5,11 +5,9 @@
 
 use crate::core::atom::{Atom, AtomData, Element};
 use crate::core::bond::{Bond, BondData, BondType};
-use crate::core::molecule::{AminoAcid, SecondaryStructure};
 use crate::core::trajectory::{FrameData, Trajectory, TrajectoryMetadata};
-use crate::io::{FileFormat, IOError, IOResult};
+use crate::io::{IOError, IOResult};
 use bevy::prelude::*;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};

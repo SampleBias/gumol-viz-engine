@@ -304,8 +304,15 @@ fn create_atom_data_from_gro(trajectory: &Trajectory) -> IOResult<Vec<AtomData>>
 
 /// Create atom data from mmCIF trajectory
 fn create_atom_data_from_mmcif(trajectory: &Trajectory) -> IOResult<Vec<AtomData>> {
-    // For now, create placeholder atom data
-    // In a real implementation, we'd parse the mmCIF file to get atom metadata
+    // Re-parse mmCIF file to extract atom metadata (element, residue, chain, etc.)
+    if trajectory.file_path.exists() {
+        if let Ok(atom_data) = MmcifParser::parse_atom_data_from_file(&trajectory.file_path) {
+            if atom_data.len() == trajectory.num_atoms {
+                return Ok(atom_data);
+            }
+        }
+    }
+    // Fallback: create placeholder atom data
     create_placeholder_atom_data(trajectory)
 }
 

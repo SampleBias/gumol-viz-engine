@@ -4,9 +4,9 @@
 //! alternative to PDB format that can store larger structures with more metadata.
 //! It uses a hierarchical key-value structure rather than fixed-width columns.
 
-use crate::core::atom::{Atom, AtomData, Element};
+use crate::core::atom::{AtomData, Element};
 use crate::core::trajectory::{FrameData, Trajectory, TrajectoryMetadata};
-use crate::io::{FileFormat, IOError, IOResult};
+use crate::io::{IOError, IOResult};
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::fs::File;
@@ -206,31 +206,182 @@ impl MmcifParser {
         Ok(trajectory)
     }
 
+    /// Parse atom metadata from an mmCIF file and return AtomData for each atom.
+    /// Used by the loading system to populate atom_data when loading mmCIF files.
+    pub fn parse_atom_data_from_file(path: &Path) -> IOResult<Vec<AtomData>> {
+        let file = File::open(path).map_err(|e| IOError::FileNotFound(path.display().to_string()))?;
+        let reader = BufReader::new(file);
+        let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
+
+        let data = Self::parse_mmcif_data(&lines)?;
+
+        let mut atom_data = Vec::with_capacity(data.atom_site.len());
+        for (atom_id, record) in data.atom_site.iter().enumerate() {
+            if let Some(ad) = Self::parse_atom_data(record, atom_id as u32) {
+                atom_data.push(ad);
+            } else {
+                // Fallback for records missing required fields
+                let atom_name = record
+                    .get("label_atom_id")
+                    .or_else(|| record.get("id"))
+                    .cloned()
+                    .unwrap_or_else(|| format!("ATOM{}", atom_id));
+                let element = Self::element_from_atom_name(&atom_name);
+                let residue_name = record
+                    .get("label_comp_id")
+                    .cloned()
+                    .unwrap_or_else(|| "UNK".to_string());
+                let residue_id = record
+                    .get("label_seq_id")
+                    .or_else(|| record.get("auth_seq_id"))
+                    .and_then(|s| s.parse::<i32>().ok())
+                    .unwrap_or(0);
+                let chain_id = record
+                    .get("auth_asym_id")
+                    .or_else(|| record.get("label_asym_id"))
+                    .cloned()
+                    .unwrap_or_else(|| "A".to_string());
+
+                atom_data.push(AtomData::new(
+                    atom_id as u32,
+                    element,
+                    residue_id as u32,
+                    residue_name,
+                    chain_id,
+                    atom_name,
+                ));
+            }
+        }
+
+        Ok(atom_data)
+    }
+
+    /// Parse mmCIF data structure from lines (extracts atom_site and metadata)
+    fn parse_mmcif_data(lines: &[String]) -> IOResult<MmcifData> {
+        let mut data = MmcifData::default();
+        let mut line_iter = lines.iter().enumerate();
+        let mut current_category = String::new();
+        let mut current_columns: Vec<String> = Vec::new();
+        let mut in_loop = false;
+
+        while let Some((_line_num, line)) = line_iter.next() {
+            let line = line.trim();
+
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if line.starts_with("data_") {
+                data.id = line[5..].to_string();
+                continue;
+            }
+            if line.starts_with("loop_") {
+                in_loop = true;
+                current_category.clear();
+                current_columns.clear();
+                continue;
+            }
+
+            if in_loop {
+                if line.starts_with('_') {
+                    if let Some(dot_pos) = line.find('.') {
+                        let category = &line[1..dot_pos];
+                        let column = &line[dot_pos + 1..];
+
+                        if current_category.is_empty() {
+                            current_category = category.to_string();
+                        } else if current_category != category {
+                            if !current_columns.is_empty() {
+                                data.categories.insert(
+                                    current_category.clone(),
+                                    current_columns.clone(),
+                                );
+                            }
+                            current_category = category.to_string();
+                            current_columns.clear();
+                        }
+                        current_columns.push(column.to_string());
+                    }
+                    continue;
+                }
+
+                if !line.starts_with('_') && !line.starts_with("loop_") && !line.starts_with("data_") {
+                    if current_category == "atom_site" {
+                        let values: Vec<String> = line
+                            .split_whitespace()
+                            .map(|s| s.to_string())
+                            .collect();
+
+                        let mut record: HashMap<String, String> = HashMap::new();
+                        for (i, value) in values.iter().enumerate() {
+                            if i < current_columns.len() {
+                                record.insert(current_columns[i].clone(), value.clone());
+                            }
+                        }
+                        data.atom_site.push(record);
+                    }
+                    continue;
+                }
+
+                in_loop = false;
+                if !current_columns.is_empty() && !current_category.is_empty() {
+                    data.categories.insert(current_category.clone(), current_columns.clone());
+                }
+                continue;
+            }
+
+            if line.starts_with('_') {
+                let parts: Vec<&str> = line.splitn(2, char::is_whitespace).collect();
+                if parts.len() >= 2 {
+                    let key = parts[0][1..].to_string();
+                    let value = parts[1].to_string();
+                    data.metadata.insert(key, value);
+                }
+                continue;
+            }
+        }
+
+        if !current_columns.is_empty() && !current_category.is_empty() {
+            data.categories.insert(current_category.clone(), current_columns);
+        }
+
+        Ok(data)
+    }
+
     /// Parse atom data from mmCIF record
     fn parse_atom_data(record: &HashMap<String, String>, atom_id: u32) -> Option<AtomData> {
-        // Get atom name
-        let atom_name = record.get("label_atom_id")?.clone();
+        // Get atom name (try label_atom_id, then id, then type_symbol)
+        let atom_name = record
+            .get("label_atom_id")
+            .or_else(|| record.get("id"))
+            .or_else(|| record.get("type_symbol"))
+            .cloned()?;
 
         // Get residue name
         let residue_name = record
             .get("label_comp_id")
-            .unwrap_or(&"UNK".to_string())
-            .clone();
+            .or_else(|| record.get("auth_comp_id"))
+            .cloned()
+            .unwrap_or_else(|| "UNK".to_string());
 
         // Get residue number
         let residue_id = record
             .get("label_seq_id")
+            .or_else(|| record.get("auth_seq_id"))
             .and_then(|s| s.parse::<i32>().ok())
             .unwrap_or(0);
 
         // Get chain ID
         let chain_id = record
             .get("auth_asym_id")
-            .unwrap_or(&"A".to_string())
-            .clone();
+            .or_else(|| record.get("label_asym_id"))
+            .cloned()
+            .unwrap_or_else(|| "A".to_string());
 
-        // Determine element from atom name
-        let element = Self::element_from_atom_name(&atom_name);
+        // Determine element: prefer type_symbol if present, else from atom name
+        let element = record
+            .get("type_symbol")
+            .and_then(|s| Element::from_symbol(s.trim()).ok())
+            .unwrap_or_else(|| Self::element_from_atom_name(&atom_name));
 
         Some(AtomData::new(
             atom_id,
@@ -406,5 +557,38 @@ ATOM 3  H  H2 .  HOH  A  1  . -0.757 0.000 0.000
         let path = Path::new("/path/to/structure.cif");
         let id = file_path_to_id(path);
         assert_eq!(id, "structure");
+    }
+
+    #[test]
+    fn test_parse_atom_data_from_string() {
+        let mmcif_content = r#"data_test
+loop_
+_atom_site.id
+_atom_site.type_symbol
+_atom_site.label_atom_id
+_atom_site.label_comp_id
+_atom_site.label_asym_id
+_atom_site.label_seq_id
+_atom_site.Cartn_x
+_atom_site.Cartn_y
+_atom_site.Cartn_z
+1 O O HOH A 1 0.000 0.000 0.000
+2 H H1 HOH A 1 0.757 0.000 0.000
+3 H H2 HOH A 1 -0.757 0.000 0.000
+"#;
+        // Parse to trajectory first, then get atom data via temp file
+        let temp_path = std::env::temp_dir().join("test_mmcif_atom_data.cif");
+        std::fs::write(&temp_path, mmcif_content).unwrap();
+
+        let result = MmcifParser::parse_atom_data_from_file(&temp_path);
+        let _ = std::fs::remove_file(&temp_path);
+
+        assert!(result.is_ok());
+        let atom_data = result.unwrap();
+        assert_eq!(atom_data.len(), 3);
+        assert_eq!(atom_data[0].element, Element::O);
+        assert_eq!(atom_data[0].residue_name, "HOH");
+        assert_eq!(atom_data[1].element, Element::H);
+        assert_eq!(atom_data[2].element, Element::H);
     }
 }

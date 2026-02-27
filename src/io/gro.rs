@@ -6,9 +6,9 @@
 //! Lines 3+: residue number (5) residue name (5) atom name (5) atom number (5) x y z (8.3 8.3 8.3) vx vy vz (8.4 8.4 8.4)
 //! Last line: box vectors (9 8.4)
 
-use crate::core::atom::{Atom, AtomData, Element};
+use crate::core::atom::{AtomData, Element};
 use crate::core::trajectory::{FrameData, Trajectory, TrajectoryMetadata};
-use crate::io::{FileFormat, IOError, IOResult};
+use crate::io::{IOError, IOResult};
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::fs::File;
