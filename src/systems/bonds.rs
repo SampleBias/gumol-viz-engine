@@ -396,7 +396,7 @@ pub fn spawn_bonds(
 /// Update bond positions when atoms move
 pub fn update_bond_positions(
     atom_entities: Res<crate::systems::spawning::AtomEntities>,
-    bond_entities: Res<BondEntities>,
+    _bond_entities: Res<BondEntities>,
     mut bond_query: Query<(&Bond, &mut Transform)>,
     atom_query: Query<&Atom>,
 ) {
@@ -471,9 +471,9 @@ pub fn despawn_all_bonds(
 
 /// Spawn bonds when atoms are loaded
 pub fn spawn_bonds_on_load(
-    mut commands: Commands,
-    mut atoms_spawned_events: EventReader<crate::systems::spawning::AtomsSpawnedEvent>,
-    mut bond_entities: ResMut<BondEntities>,
+    _commands: Commands,
+    atoms_spawned_events: EventReader<crate::systems::spawning::AtomsSpawnedEvent>,
+    bond_entities: ResMut<BondEntities>,
     mut config: ResMut<BondDetectionConfig>,
 ) {
     // Spawn bonds when atoms are spawned
@@ -488,7 +488,7 @@ pub fn spawn_bonds_on_load(
 pub fn clear_bonds_on_load(
     mut commands: Commands,
     mut bond_entities: ResMut<BondEntities>,
-    mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
     mut despawned_event: EventWriter<BondsDespawnedEvent>,
 ) {
     if !file_loaded_events.is_empty() && !bond_entities.entities.is_empty() {

@@ -1,7 +1,7 @@
 //! Math utility functions for molecular dynamics
 
 use bevy::prelude::*;
-use nalgebra::{Vector3, Matrix3, Rotation3};
+use nalgebra::{Vector3, Matrix3};
 use std::f32::consts::PI;
 
 /// Apply periodic boundary conditions to a position

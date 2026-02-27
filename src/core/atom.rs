@@ -2,7 +2,6 @@
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Atom component attached to Bevy entities
 #[derive(Component, Clone, Debug, Reflect, Default)]

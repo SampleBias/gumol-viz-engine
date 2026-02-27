@@ -277,7 +277,7 @@ impl DcdParser {
 }
 
 /// Register DCD parsing systems with Bevy
-pub fn register(app: &mut App) {
+pub fn register(_app: &mut App) {
     info!("DCD parser registered");
 }
 

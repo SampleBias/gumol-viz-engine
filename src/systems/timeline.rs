@@ -3,7 +3,7 @@
 //! This system handles trajectory playback, frame advancement, and
 //! smooth animation through interpolation.
 
-use crate::core::trajectory::{FrameData, TimelineState, interpolate_frames};
+use crate::core::trajectory::TimelineState;
 use bevy::prelude::*;
 
 /// Target frames per second for playback

@@ -33,7 +33,7 @@ pub struct GroParser;
 impl GroParser {
     /// Parse a GRO file and return trajectory data
     pub fn parse_file(path: &Path) -> IOResult<Trajectory> {
-        let file = File::open(path).map_err(|e| IOError::FileNotFound(path.display().to_string()))?;
+        let file = File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
         let reader = BufReader::new(file);
         Self::parse_reader(reader, path.to_path_buf())
     }
@@ -356,7 +356,7 @@ impl GroWriter {
 }
 
 /// Register GRO parsing systems with Bevy
-pub fn register(app: &mut App) {
+pub fn register(_app: &mut App) {
     info!("GRO parser registered");
 }
 

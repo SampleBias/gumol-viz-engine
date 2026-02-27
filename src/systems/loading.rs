@@ -343,7 +343,7 @@ pub fn handle_load_file_events(
     mut load_success: EventWriter<FileLoadedEvent>,
     mut load_error: EventWriter<FileLoadErrorEvent>,
     mut sim_data: ResMut<SimulationData>,
-    mut file_handle: Option<ResMut<FileHandle>>,
+    file_handle: Option<ResMut<FileHandle>>,
 ) {
     // Early return if no events
     if load_events.is_empty() {
@@ -417,7 +417,7 @@ pub fn load_cli_file(
 
 /// Startup system to load a default file (optional)
 pub fn load_default_file(
-    mut commands: Commands,
+    _commands: Commands,
     mut load_events: EventWriter<LoadFileEvent>,
 ) {
     // Check if there's a test file in the examples directory

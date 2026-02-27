@@ -1,6 +1,5 @@
 //! Utility functions and helpers
 
-use bevy::prelude::*;
 
 pub mod geometry;
 pub mod colors;

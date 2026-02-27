@@ -19,7 +19,7 @@ pub struct MmcifParser;
 impl MmcifParser {
     /// Parse an mmCIF file and return trajectory data
     pub fn parse_file(path: &Path) -> IOResult<Trajectory> {
-        let file = File::open(path).map_err(|e| IOError::FileNotFound(path.display().to_string()))?;
+        let file = File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
         let reader = BufReader::new(file);
         Self::parse_reader(reader, path.to_path_buf())
     }
@@ -55,7 +55,7 @@ impl MmcifParser {
         let mut current_columns: Vec<String> = Vec::new();
         let mut in_loop = false;
 
-        while let Some((line_num, line)) = line_iter.next() {
+        while let Some((_line_num, line)) = line_iter.next() {
             let line = line.trim();
 
             // Skip comments and empty lines
@@ -209,7 +209,7 @@ impl MmcifParser {
     /// Parse atom metadata from an mmCIF file and return AtomData for each atom.
     /// Used by the loading system to populate atom_data when loading mmCIF files.
     pub fn parse_atom_data_from_file(path: &Path) -> IOResult<Vec<AtomData>> {
-        let file = File::open(path).map_err(|e| IOError::FileNotFound(path.display().to_string()))?;
+        let file = File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
         let reader = BufReader::new(file);
         let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
 
@@ -499,7 +499,7 @@ fn file_path_to_id(path: &Path) -> String {
 }
 
 /// Register mmCIF parsing systems with Bevy
-pub fn register(app: &mut App) {
+pub fn register(_app: &mut App) {
     info!("mmCIF parser registered");
 }
 

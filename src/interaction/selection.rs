@@ -120,7 +120,7 @@ pub fn handle_atom_selection(
     mut selection: ResMut<SelectionState>,
     mut selected_events: EventWriter<AtomSelectedEvent>,
     mut deselected_events: EventWriter<AtomDeselectedEvent>,
-    mouse: Res<ButtonInput<MouseButton>>,
+    _mouse: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mut click_events: EventReader<Pointer<Click>>,
     atom_query: Query<
@@ -276,12 +276,12 @@ pub struct SelectionBox;
 
 /// Draw selection box when in box selection mode
 pub fn draw_selection_box(
-    mut commands: Commands,
-    selection: Res<SelectionState>,
-    mouse: Res<ButtonInput<MouseButton>>,
-    keyboard: Res<ButtonInput<KeyCode>>,
-    windows: Query<&Window>,
-    camera_q: Query<(&Camera, &GlobalTransform)>,
+    _commands: Commands,
+    _selection: Res<SelectionState>,
+    _mouse: Res<ButtonInput<MouseButton>>,
+    _keyboard: Res<ButtonInput<KeyCode>>,
+    _windows: Query<&Window>,
+    _camera_q: Query<(&Camera, &GlobalTransform)>,
 ) {
     // Box selection is not yet implemented
     // This would require mouse drag detection and raycasting to a plane
@@ -291,7 +291,7 @@ pub fn draw_selection_box(
 pub fn clear_selection_on_load(
     mut commands: Commands,
     mut selection: ResMut<SelectionState>,
-    mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
     mut cleared_event: EventWriter<SelectionClearedEvent>,
 ) {
     if !file_loaded_events.is_empty() && !selection.is_empty() {

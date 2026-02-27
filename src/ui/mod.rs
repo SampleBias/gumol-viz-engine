@@ -283,7 +283,7 @@ pub fn main_ui_panel(
                 ui.label(format!("Time: {:.2} ps", timeline.simulation_time(sim_data.trajectory.time_step) / 1000.0));
 
                 // Progress bar
-                let progress = timeline.progress();
+                let _progress = timeline.progress();
                 let mut frame_value = timeline.current_frame as f32;
                 if ui.add(
                     bevy_egui::egui::Slider::new(&mut frame_value, 0.0..=(total_frames - 1) as f32)

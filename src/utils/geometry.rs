@@ -1,7 +1,6 @@
 //! Geometry utility functions for molecular visualization
 
 use bevy::prelude::*;
-use nalgebra::Vector3;
 
 /// Calculate distance between two points
 pub fn distance(pos_a: Vec3, pos_b: Vec3) -> f32 {
@@ -31,7 +30,7 @@ pub fn dihedral(pos_a: Vec3, pos_b: Vec3, pos_c: Vec3, pos_d: Vec3) -> f32 {
 }
 
 /// Generate a sphere mesh for atoms
-pub fn create_sphere_mesh(radius: f32, resolution: u32) -> Mesh {
+pub fn create_sphere_mesh(radius: f32, _resolution: u32) -> Mesh {
     // Placeholder: will be implemented properly in rendering module
     crate::rendering::generate_atom_mesh(radius)
 }

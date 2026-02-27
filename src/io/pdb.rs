@@ -3,8 +3,8 @@
 //! The Protein Data Bank (PDB) format is a standard for representing
 //! 3D structures of biological macromolecules.
 
-use crate::core::atom::{Atom, AtomData, Element};
-use crate::core::bond::{Bond, BondData, BondType};
+use crate::core::atom::{AtomData, Element};
+use crate::core::bond::{BondData, BondType};
 use crate::core::trajectory::{FrameData, Trajectory, TrajectoryMetadata};
 use crate::io::{IOError, IOResult};
 use bevy::prelude::*;
@@ -18,7 +18,7 @@ pub struct PDBParser;
 impl PDBParser {
     /// Parse a PDB file and return trajectory data
     pub fn parse_file(path: &Path) -> IOResult<Trajectory> {
-        let file = File::open(path).map_err(|e| IOError::FileNotFound(path.display().to_string()))?;
+        let file = File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
         let reader = BufReader::new(file);
         Self::parse_reader(reader, path.to_path_buf())
     }
@@ -328,7 +328,7 @@ impl PDBWriter {
 }
 
 /// Register PDB parsing systems with Bevy
-pub fn register(app: &mut App) {
+pub fn register(_app: &mut App) {
     info!("PDB parser registered");
 }
 

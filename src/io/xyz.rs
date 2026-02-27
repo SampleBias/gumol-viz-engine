@@ -5,9 +5,9 @@
 //! Line 2: Comment line (title)
 //! Lines 3+: Element symbol X Y Z (and optional fields)
 
-use crate::core::atom::{Atom, AtomData, Element};
-use crate::core::trajectory::{FrameData, Trajectory, TrajectoryMetadata};
-use crate::io::{FileFormat, IOError, IOResult};
+use crate::core::atom::{AtomData, Element};
+use crate::core::trajectory::{FrameData, Trajectory};
+use crate::io::{IOError, IOResult};
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::fs::File;
@@ -20,7 +20,7 @@ pub struct XYZParser;
 impl XYZParser {
     /// Parse an XYZ file and return trajectory data
     pub fn parse_file(path: &Path) -> IOResult<Trajectory> {
-        let file = File::open(path).map_err(|e| IOError::FileNotFound(path.display().to_string()))?;
+        let file = File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
         let reader = BufReader::new(file);
         Self::parse_reader(reader, path.to_path_buf())
     }
@@ -80,7 +80,7 @@ impl XYZParser {
             }
 
             // Read comment line
-            if let Some((comment_line_num, comment_line)) = line_iter.next() {
+            if let Some((_comment_line_num, comment_line)) = line_iter.next() {
                 let comment = comment_line.trim();
 
                 // Try to extract time from comment line
@@ -191,7 +191,7 @@ impl XYZParser {
 
     /// Stream frames from a large XYZ file (memory-efficient)
     pub fn stream_frames(path: &Path) -> IOResult<FrameStream> {
-        let file = File::open(path).map_err(|e| IOError::FileNotFound(path.display().to_string()))?;
+        let file = File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
         Ok(FrameStream {
             reader: BufReader::new(file),
             file_path: path.to_path_buf(),
@@ -312,7 +312,7 @@ impl XYZWriter {
 }
 
 /// Register XYZ parsing systems with Bevy
-pub fn register(app: &mut App) {
+pub fn register(_app: &mut App) {
     info!("XYZ parser registered");
 }
 
