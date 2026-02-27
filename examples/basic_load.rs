@@ -18,6 +18,8 @@ fn main() {
             }),
             ..default()
         }))
+        .add_plugins(bevy_egui::EguiPlugin)
+        .add_plugins(bevy_mod_picking::DefaultPickingPlugins)
         .add_plugins(bevy_panorbit_camera::PanOrbitCameraPlugin)
         .add_plugins(GumolVizPlugin)
         .add_systems(Startup, setup)
