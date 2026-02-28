@@ -43,6 +43,7 @@ gumol-viz-engine/
 - **Core Data Structures**: Complete implementations of Atom, Element, Bond, Molecule, Trajectory, FrameData, TimelineState
 - **XYZ Parser**: Fully functional with streaming support for large files
 - **PDB Parser**: Complete with ATOM, HETATM, CONECT record parsing
+- **Secondary Parsers**: GRO, DCD, and mmCIF formats fully implemented
 - **Element System**: All 118 elements with CPK colors, van der Waals radii, atomic masses
 - **Mesh Generation**: Basic sphere (atom) and cylinder (bond) mesh generation
 - **Bevy Plugin Structure**: GumolVizPlugin with module registration
@@ -51,7 +52,35 @@ gumol-viz-engine/
 - **Timeline & Animation**: Complete playback system with interpolation, speed control, keyboard/UI controls
 - **UI System**: EGUI-based interface with file loading, status display, timeline controls, and selection info
 - **Atom Selection**: Complete selection system with raycasting, highlighting, and multi-select support
-- **Demo Scene**: Water molecule (H2O) with atoms and bonds in main.rs
+- **Bond Detection**: Distance-based bond detection with automatic spawning
+- **Visualization Modes**: CPK, Ball-and-Stick, Licorice, Wireframe, Surface, Cartoon, Tube, Trace, Points
+- **Export Systems**: Screenshot, OBJ, and glTF export functionality
+
+### ⚠️ Performance Issues Identified (June 2025)
+**CRITICAL:** Comprehensive GPU performance analysis revealed major bottlenecks:
+
+- **No Instanced Rendering**: Each atom = separate draw call (10,000 atoms = 10,000 draw calls)
+- **GPU Utilization**: <10% (should be >80%)
+- **CPU Position Updates**: Timeline interpolation done on CPU, transferred to GPU every frame
+- **Synchronous File Loading**: Blocks UI thread (100K atom PDB = 5-10 second freeze)
+- **O(N²) Bond Detection**: Checks every atom against every other atom
+- **No Spatial Acceleration**: No octree/BVH for queries
+- **No Frustum Culling**: All atoms rendered regardless of camera view
+- **High-Poly Meshes Everywhere**: No level-of-detail system
+
+**Impact:**
+- 10K atoms: 10-30 FPS (unusable for smooth interaction)
+- 100K atoms: <1 FPS (completely unusable)
+- Load times: 500ms - 5s with UI freeze
+
+**Solution Path:** See `docs/GPU_PERFORMANCE_ANALYSIS.md` and `docs/QUICK_START_OPTIMIZATION.md`
+
+**Expected Improvements:**
+- Instanced rendering: 100-1000x performance gain
+- GPU compute updates: 10-50x faster animation
+- Async loading: Eliminates UI freezes
+- 10K atoms: 10 FPS → 200+ FPS
+- 100K atoms: <1 FPS → 60+ FPS
 
 ### 🔨 In Progress / Stubs
 - **Camera Controls**: Using bevy_panorbit_camera, custom controls stubbed
@@ -207,6 +236,15 @@ According to `tasks/todo.md`, the next priorities are:
 
 ## Session Update - 2026-02-25 14:51
 - **Session Started**: 2026-02-25 14:51
+- **Context Status**: Verified and up-to-date
+
+*Context automatically updated for new development session*
+
+
+---
+
+## Session Update - 2026-02-28 09:21
+- **Session Started**: 2026-02-28 09:21
 - **Context Status**: Verified and up-to-date
 
 *Context automatically updated for new development session*

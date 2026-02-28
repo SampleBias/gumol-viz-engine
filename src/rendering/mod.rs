@@ -1,14 +1,45 @@
 //! Rendering systems and mesh generation
 
+pub mod instanced;
+
 use bevy::{
     prelude::*,
     render::{
         mesh::{Indices, PrimitiveTopology},
+        render_resource::ShaderType,
     },
 };
 
 const RENDER_ASSET_USAGES: bevy::render::render_asset::RenderAssetUsages =
     bevy::render::render_asset::RenderAssetUsages::RENDER_WORLD;
+
+// ============================================================================
+// INSTANCED RENDERING COMPONENTS
+// ============================================================================
+
+/// Instance data for each atom (sent to GPU for instanced rendering)
+#[derive(ShaderType, Clone, Copy, Default, Debug, PartialEq)]
+pub struct AtomInstanceData {
+    /// Atom position in world space
+    pub position: Vec3,
+    /// Scale factor (multiplied with base mesh radius)
+    pub scale: f32,
+    /// Atom color (RGBA)
+    pub color: Vec4,
+    /// Padding for 16-byte alignment
+    pub _padding: Vec3,
+}
+
+/// Component holding instance data for instanced atom rendering
+#[derive(Component, Default, Debug)]
+pub struct InstancedAtomMesh {
+    /// All instances of atoms of this element type
+    pub instances: Vec<AtomInstanceData>,
+}
+
+// ============================================================================
+// MESH GENERATION
+// ============================================================================
 
 /// Register all rendering systems
 pub fn register(_app: &mut App) {

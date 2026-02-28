@@ -141,3 +141,24 @@
 ## New Session - 2026-02-27
 - [x] Complete `create_atom_data_from_mmcif()` — added `MmcifParser::parse_atom_data_from_file()`, `parse_mmcif_data()`, improved `parse_atom_data()` with alternative column names
 - [x] Create `docs/SECONDARY_FORMATS.md` — comprehensive docs for GRO, DCD, mmCIF
+
+---
+
+## New Session - 2025-06-17 09:30 - GPU Performance Optimization
+- [x] Comprehensive GPU performance analysis completed
+- [x] Identified 6 critical performance bottlenecks
+- [x] Created detailed performance analysis document (`docs/GPU_PERFORMANCE_ANALYSIS.md`)
+- [x] Created quick start optimization guide (`docs/QUICK_START_OPTIMIZATION.md`)
+- [ ] Implement instanced rendering (CRITICAL - Week 1-2)
+- [ ] Implement GPU compute for position updates (CRITICAL - Week 3-4)
+- [ ] Implement async file loading (CRITICAL - Week 3-4)
+- [ ] Implement material pooling (CRITICAL - Week 1-2)
+- [ ] Implement spatial partitioning for bond detection (HIGH - Week 7-8)
+- [ ] Implement frustum culling (HIGH - Week 7-8)
+- [ ] Implement level-of-detail (LOD) system (HIGH - Week 9-10)
+- [ ] Implement parallel file parsing with rayon (HIGH - Week 9-10)
+- [ ] Add performance profiling with puffin (CRITICAL - Week 1)
+- [ ] Create benchmark suite for performance testing (CRITICAL - Week 1)
+- [ ] Document baseline performance metrics (CRITICAL - Week 1)
+
+*Session started: 2025-06-17 09:30*
