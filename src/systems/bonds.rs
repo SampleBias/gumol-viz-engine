@@ -3,8 +3,8 @@
 //! This system detects bonds between atoms based on distance and
 //! spawns bond entities with cylindrical meshes.
 
-use crate::core::atom::{Atom, Element};
-use crate::core::bond::{Bond, BondData, BondType, BondOrder};
+use crate::core::atom::Element;
+use crate::core::bond::{Bond, BondData, BondOrder, BondType};
 use crate::rendering;
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -44,43 +44,39 @@ impl Default for BondDetectionConfig {
 }
 
 impl BondDetectionConfig {
-    /// Check if two atoms should be bonded based on distance
+    /// Check if two atoms should be bonded based on element, distance, and residue
     pub fn should_bond(
         &self,
-        atom_a: &Atom,
-        atom_b: &Atom,
+        element_a: Element,
+        element_b: Element,
+        residue_a: u32,
+        residue_b: u32,
         distance: f32,
     ) -> bool {
-        // Check distance bounds
         if distance < self.min_bond_distance || distance > self.max_bond_distance {
             return false;
         }
 
-        // Check van der Waals radii
-        let vdw_sum = atom_a.element.vdw_radius() + atom_b.element.vdw_radius();
+        let vdw_sum = element_a.vdw_radius() + element_b.vdw_radius();
         if distance > vdw_sum * self.distance_multiplier {
             return false;
         }
 
-        // Check same residue constraint
-        if self.same_residue_only {
-            if atom_a.residue_id != atom_b.residue_id {
-                return false;
-            }
+        if self.same_residue_only && residue_a != residue_b {
+            return false;
         }
 
         true
     }
 
-    /// Determine bond order based on atom types and distance
+    /// Determine bond order based on element types and distance
     pub fn determine_bond_order(
         &self,
-        atom_a: &Atom,
-        atom_b: &Atom,
+        element_a: Element,
+        element_b: Element,
         distance: f32,
     ) -> BondOrder {
-        // Simplified bond order detection based on distance
-        let expected_length = crate::core::bond::BondLengths::get_length(atom_a.element, atom_b.element);
+        let expected_length = crate::core::bond::BondLengths::get_length(element_a, element_b);
 
         if distance < expected_length * 0.9 {
             BondOrder::Triple
@@ -91,10 +87,9 @@ impl BondDetectionConfig {
         }
     }
 
-    /// Determine bond type based on atom types
-    pub fn determine_bond_type(&self, atom_a: &Atom, atom_b: &Atom) -> BondType {
-        // Simplified bond type detection
-        match (atom_a.element.symbol(), atom_b.element.symbol()) {
+    /// Determine bond type based on element types
+    pub fn determine_bond_type(&self, element_a: Element, element_b: Element) -> BondType {
+        match (element_a.symbol(), element_b.symbol()) {
             ("H", _) | (_, "H") => BondType::Covalent,
             ("C", "C") => BondType::Covalent,
             ("C", "N") | ("N", "C") => BondType::Covalent,
@@ -112,7 +107,6 @@ impl BondDetectionConfig {
 /// Event sent when bonds are spawned
 #[derive(Event, Debug)]
 pub struct BondsSpawnedEvent {
-    /// Number of bonds spawned
     pub count: usize,
 }
 
@@ -120,9 +114,9 @@ pub struct BondsSpawnedEvent {
 #[derive(Event, Debug)]
 pub struct BondsDespawnedEvent;
 
-/// Helper struct to collect atom data without borrow conflicts
+/// Lightweight atom snapshot for bond detection (avoids borrow conflicts)
 #[derive(Clone, Debug)]
-struct AtomDataCached {
+struct AtomSnapshot {
     id: u32,
     entity: Entity,
     element: Element,
@@ -130,235 +124,87 @@ struct AtomDataCached {
     residue_id: u32,
 }
 
-/// Detect bonds and collect atom positions
-fn detect_and_collect_bonds(
-    atom_entities: Res<crate::systems::spawning::AtomEntities>,
-    config: Res<BondDetectionConfig>,
-    atom_query: Query<&Atom>,
-) -> (Vec<BondData>, Vec<AtomDataCached>) {
-    if !config.enabled {
-        return (Vec::new(), Vec::new());
-    }
-
-    let mut bonds = Vec::new();
-    let mut atom_data = Vec::new();
-
-    // Get all atom IDs
-    let atom_ids: Vec<u32> = atom_entities.entities.keys().copied().collect();
-
-    // Collect atom data first
-    for atom_id in atom_ids.iter() {
-        let entity = match atom_entities.entities.get(atom_id) {
-            Some(entity) => *entity,
-            None => continue,
-        };
-
-        let atom = match atom_query.get(entity) {
-            Ok(atom) => atom,
-            Err(_) => continue,
-        };
-
-        atom_data.push(AtomDataCached {
-            id: *atom_id,
-            entity,
-            element: atom.element,
-            position: atom.position,
-            residue_id: atom.residue_id,
-        });
-    }
-
-    // Detect bonds
-    for (i, atom_data_a) in atom_data.iter().enumerate() {
-        let pos_a = atom_data_a.position;
-
-        for atom_data_b in atom_data.iter().skip(i + 1) {
-            let pos_b = atom_data_b.position;
-            let distance = pos_a.distance(pos_b);
-
-            // Check if should bond
-            if config.should_bond(
-                &Atom {
-                    id: atom_data_a.id,
-                    element: atom_data_a.element,
-                    position: pos_a,
-                    residue_id: atom_data_a.residue_id,
-                    residue_name: String::new(),
-                    chain_id: String::new(),
-                    b_factor: 0.0,
-                    occupancy: 0.0,
-                    name: String::new(),
-                },
-                &Atom {
-                    id: atom_data_b.id,
-                    element: atom_data_b.element,
-                    position: pos_b,
-                    residue_id: atom_data_b.residue_id,
-                    residue_name: String::new(),
-                    chain_id: String::new(),
-                    b_factor: 0.0,
-                    occupancy: 0.0,
-                    name: String::new(),
-                },
-                distance,
-            ) {
-                // Determine bond properties
-                let bond_order = config.determine_bond_order(
-                    &Atom {
-                        id: atom_data_a.id,
-                        element: atom_data_a.element,
-                        position: pos_a,
-                        residue_id: atom_data_a.residue_id,
-                        residue_name: String::new(),
-                        chain_id: String::new(),
-                        b_factor: 0.0,
-                        occupancy: 0.0,
-                        name: String::new(),
-                    },
-                    &Atom {
-                        id: atom_data_b.id,
-                        element: atom_data_b.element,
-                        position: pos_b,
-                        residue_id: atom_data_b.residue_id,
-                        residue_name: String::new(),
-                        chain_id: String::new(),
-                        b_factor: 0.0,
-                        occupancy: 0.0,
-                        name: String::new(),
-                    },
-                    distance,
-                );
-                let bond_type = config.determine_bond_type(
-                    &Atom {
-                        id: atom_data_a.id,
-                        element: atom_data_a.element,
-                        position: pos_a,
-                        residue_id: atom_data_a.residue_id,
-                        residue_name: String::new(),
-                        chain_id: String::new(),
-                        b_factor: 0.0,
-                        occupancy: 0.0,
-                        name: String::new(),
-                    },
-                    &Atom {
-                        id: atom_data_b.id,
-                        element: atom_data_b.element,
-                        position: pos_b,
-                        residue_id: atom_data_b.residue_id,
-                        residue_name: String::new(),
-                        chain_id: String::new(),
-                        b_factor: 0.0,
-                        occupancy: 0.0,
-                        name: String::new(),
-                    },
-                );
-
-                // Create bond data
-                let bond_data = BondData::new(
-                    atom_data_a.id,
-                    atom_data_b.id,
-                    bond_type,
-                    bond_order,
-                    distance,
-                );
-
-                bonds.push(bond_data);
-            }
-        }
-    }
-
-    info!("Detected {} bonds", bonds.len());
-    (bonds, atom_data)
-}
-
-/// Spawn bond entities from detected bonds
+/// Detect bonds between atoms. Only runs when bond_entities is empty and atoms exist.
 pub fn spawn_bonds(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     atom_entities: Res<crate::systems::spawning::AtomEntities>,
     mut bond_entities: ResMut<BondEntities>,
-    atom_query: Query<&Atom>,
+    atom_query: Query<(&crate::core::atom::Atom, &Transform)>,
     config: Res<BondDetectionConfig>,
     mut spawned_events: EventWriter<BondsSpawnedEvent>,
 ) {
-    // Only spawn if config is enabled
-    if !config.enabled {
+    if !config.enabled || atom_entities.entities.is_empty() || !bond_entities.entities.is_empty() {
         return;
     }
 
-    // Only spawn if atoms exist
-    if atom_entities.entities.is_empty() {
-        return;
+    let mut snapshots = Vec::with_capacity(atom_entities.entities.len());
+    for (&atom_id, &entity) in atom_entities.entities.iter() {
+        if let Ok((atom, transform)) = atom_query.get(entity) {
+            snapshots.push(AtomSnapshot {
+                id: atom_id,
+                entity,
+                element: atom.element,
+                position: transform.translation,
+                residue_id: atom.residue_id,
+            });
+        }
     }
 
-    // Detect bonds and collect atom data
-    let (bonds, atom_data) = detect_and_collect_bonds(atom_entities, config, atom_query);
+    let mut bonds: Vec<(BondData, Entity, Entity)> = Vec::new();
+
+    for (i, a) in snapshots.iter().enumerate() {
+        for b in snapshots.iter().skip(i + 1) {
+            let distance = a.position.distance(b.position);
+
+            if config.should_bond(a.element, b.element, a.residue_id, b.residue_id, distance) {
+                let bond_order = config.determine_bond_order(a.element, b.element, distance);
+                let bond_type = config.determine_bond_type(a.element, b.element);
+
+                let bond_data = BondData::new(a.id, b.id, bond_type, bond_order, distance);
+                bonds.push((bond_data, a.entity, b.entity));
+            }
+        }
+    }
 
     if bonds.is_empty() {
-        info!("No bonds to spawn");
         return;
     }
 
     info!("Spawning {} bonds...", bonds.len());
 
-    // Spawn bond entities
-    for bond_data in bonds {
-        let atom_a_id = bond_data.atom_a_id;
-        let atom_b_id = bond_data.atom_b_id;
+    let bond_material = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.6, 0.6, 0.6),
+        metallic: 0.2,
+        perceptual_roughness: 0.4,
+        ..default()
+    });
 
-        // Find atom positions
-        let pos_a = match atom_data.iter().find(|ad| ad.id == atom_a_id) {
-            Some(ad) => ad.position,
+    for (bond_data, entity_a, entity_b) in bonds {
+        let pos_a = match snapshots.iter().find(|s| s.id == bond_data.atom_a_id) {
+            Some(s) => s.position,
+            None => continue,
+        };
+        let pos_b = match snapshots.iter().find(|s| s.id == bond_data.atom_b_id) {
+            Some(s) => s.position,
             None => continue,
         };
 
-        let pos_b = match atom_data.iter().find(|ad| ad.id == atom_b_id) {
-            Some(ad) => ad.position,
-            None => continue,
-        };
-
-        // Calculate bond geometry
         let bond_vector = pos_b - pos_a;
         let bond_length = bond_vector.length();
         let bond_midpoint = pos_a + bond_vector * 0.5;
 
-        // Generate bond mesh
-        let bond_radius = 0.1; // Default bond radius
+        let bond_radius = 0.1;
         let bond_mesh = meshes.add(rendering::generate_bond_mesh(bond_length, bond_radius));
 
-        // Create bond material
-        let bond_material = materials.add(StandardMaterial {
-            base_color: Color::srgb(0.6, 0.6, 0.6), // Gray bonds
-            metallic: 0.2,
-            perceptual_roughness: 0.4,
-            ..default()
-        });
+        let rotation = compute_bond_rotation(bond_vector, bond_length);
 
-        // Calculate transform
-        let rotation = if bond_length > 0.0001 {
-            // Calculate rotation to align cylinder with bond vector
-            let up = Vec3::Y;
-            let direction = bond_vector.normalize();
-            let axis = up.cross(direction);
-            let axis_length = axis.length();
-            let angle = if axis_length > 0.0001 {
-                axis_length.atan2(up.dot(direction))
-            } else if up.dot(direction) < 0.0 {
-                std::f32::consts::PI
-            } else {
-                0.0
-            };
-            Quat::from_axis_angle(axis.normalize(), angle)
-        } else {
-            Quat::IDENTITY
-        };
-
-        // Spawn bond entity
         let bond_entity = commands
             .spawn((
                 PbrBundle {
                     mesh: bond_mesh,
-                    material: bond_material,
+                    material: bond_material.clone(),
                     transform: Transform {
                         translation: bond_midpoint,
                         rotation,
@@ -367,10 +213,10 @@ pub fn spawn_bonds(
                     ..default()
                 },
                 Bond {
-                    atom_a: Entity::PLACEHOLDER,
-                    atom_b: Entity::PLACEHOLDER,
-                    atom_a_id,
-                    atom_b_id,
+                    atom_a: entity_a,
+                    atom_b: entity_b,
+                    atom_a_id: bond_data.atom_a_id,
+                    atom_b_id: bond_data.atom_b_id,
                     bond_type: bond_data.bond_type,
                     order: bond_data.order,
                     length: bond_length,
@@ -378,11 +224,10 @@ pub fn spawn_bonds(
             ))
             .id();
 
-        // Track bond entity
-        let bond_key = if atom_a_id < atom_b_id {
-            (atom_a_id, atom_b_id)
+        let bond_key = if bond_data.atom_a_id < bond_data.atom_b_id {
+            (bond_data.atom_a_id, bond_data.atom_b_id)
         } else {
-            (atom_b_id, atom_a_id)
+            (bond_data.atom_b_id, bond_data.atom_a_id)
         };
         bond_entities.entities.insert(bond_key, bond_entity);
     }
@@ -393,59 +238,65 @@ pub fn spawn_bonds(
     });
 }
 
-/// Update bond positions when atoms move
+/// Update bond positions when atoms move (reads from Transform, not Atom.position)
 pub fn update_bond_positions(
     atom_entities: Res<crate::systems::spawning::AtomEntities>,
-    _bond_entities: Res<BondEntities>,
-    mut bond_query: Query<(&Bond, &mut Transform)>,
-    atom_query: Query<&Atom>,
+    mut param_set: ParamSet<(
+        Query<(&Bond, &mut Transform)>,
+        Query<&Transform, With<crate::systems::spawning::SpawnedAtom>>,
+    )>,
 ) {
-    for (bond, mut transform) in bond_query.iter_mut() {
-        // Get atom entities by ID
-        let entity_a = match atom_entities.entities.get(&bond.atom_a_id) {
-            Some(entity) => *entity,
-            None => continue,
-        };
-
-        let entity_b = match atom_entities.entities.get(&bond.atom_b_id) {
-            Some(entity) => *entity,
-            None => continue,
-        };
-
-        // Get atom positions
-        let pos_a = match atom_query.get(entity_a) {
-            Ok(atom) => atom.position,
-            Err(_) => continue,
-        };
-
-        let pos_b = match atom_query.get(entity_b) {
-            Ok(atom) => atom.position,
-            Err(_) => continue,
-        };
-
-        // Calculate new bond geometry
-        let bond_vector = pos_b - pos_a;
-        let bond_length = bond_vector.length();
-        let bond_midpoint = pos_a + bond_vector * 0.5;
-
-        // Update position
-        transform.translation = bond_midpoint;
-
-        // Update rotation
-        if bond_length > 0.0001 {
-            let up = Vec3::Y;
-            let direction = bond_vector.normalize();
-            let axis = up.cross(direction);
-            let axis_length = axis.length();
-            let angle = if axis_length > 0.0001 {
-                axis_length.atan2(up.dot(direction))
-            } else if up.dot(direction) < 0.0 {
-                std::f32::consts::PI
-            } else {
-                0.0
-            };
-            transform.rotation = Quat::from_axis_angle(axis.normalize(), angle);
+    // Step 1: collect atom positions from their Transforms
+    let mut atom_positions: HashMap<u32, Vec3> = HashMap::new();
+    {
+        let atom_transforms = param_set.p1();
+        for (&atom_id, &entity) in atom_entities.entities.iter() {
+            if let Ok(transform) = atom_transforms.get(entity) {
+                atom_positions.insert(atom_id, transform.translation);
+            }
         }
+    }
+
+    // Step 2: update bond transforms using the collected positions
+    {
+        let mut bond_query = param_set.p0();
+        for (bond, mut transform) in bond_query.iter_mut() {
+            let pos_a = match atom_positions.get(&bond.atom_a_id) {
+                Some(pos) => *pos,
+                None => continue,
+            };
+            let pos_b = match atom_positions.get(&bond.atom_b_id) {
+                Some(pos) => *pos,
+                None => continue,
+            };
+
+            let bond_vector = pos_b - pos_a;
+            let bond_length = bond_vector.length();
+
+            transform.translation = pos_a + bond_vector * 0.5;
+            transform.rotation = compute_bond_rotation(bond_vector, bond_length);
+        }
+    }
+}
+
+/// Compute rotation quaternion to align a Y-axis cylinder with a bond vector
+fn compute_bond_rotation(bond_vector: Vec3, bond_length: f32) -> Quat {
+    if bond_length < 0.0001 {
+        return Quat::IDENTITY;
+    }
+
+    let up = Vec3::Y;
+    let direction = bond_vector.normalize();
+    let axis = up.cross(direction);
+    let axis_length = axis.length();
+
+    if axis_length > 0.0001 {
+        let angle = axis_length.atan2(up.dot(direction));
+        Quat::from_axis_angle(axis.normalize(), angle)
+    } else if up.dot(direction) < 0.0 {
+        Quat::from_rotation_x(std::f32::consts::PI)
+    } else {
+        Quat::IDENTITY
     }
 }
 
@@ -460,27 +311,11 @@ pub fn despawn_all_bonds(
     if count > 0 {
         info!("Despawning {} bonds", count);
 
-        // Despawn all bond entities
         for (_, entity) in bond_entities.entities.drain() {
             commands.entity(entity).despawn_recursive();
         }
 
         despawned_event.send(BondsDespawnedEvent);
-    }
-}
-
-/// Spawn bonds when atoms are loaded
-pub fn spawn_bonds_on_load(
-    _commands: Commands,
-    atoms_spawned_events: EventReader<crate::systems::spawning::AtomsSpawnedEvent>,
-    bond_entities: ResMut<BondEntities>,
-    mut config: ResMut<BondDetectionConfig>,
-) {
-    // Spawn bonds when atoms are spawned
-    if !atoms_spawned_events.is_empty() && bond_entities.entities.is_empty() {
-        // Enable bond detection by default
-        config.enabled = true;
-        info!("Bonds will be detected and spawned");
     }
 }
 
@@ -492,7 +327,6 @@ pub fn clear_bonds_on_load(
     mut despawned_event: EventWriter<BondsDespawnedEvent>,
 ) {
     if !file_loaded_events.is_empty() && !bond_entities.entities.is_empty() {
-        // Despawn all bonds
         for (_, entity) in bond_entities.entities.drain() {
             commands.entity(entity).despawn_recursive();
         }
@@ -502,18 +336,14 @@ pub fn clear_bonds_on_load(
     }
 }
 
-/// Register all bond systems
+/// Register bond resources and events. Systems are registered centrally in systems::register.
 pub fn register(app: &mut App) {
     app.init_resource::<BondEntities>()
         .init_resource::<BondDetectionConfig>()
         .add_event::<BondsSpawnedEvent>()
-        .add_event::<BondsDespawnedEvent>()
-        .add_systems(Update, spawn_bonds_on_load)
-        .add_systems(Update, spawn_bonds)
-        .add_systems(Update, update_bond_positions)
-        .add_systems(Update, clear_bonds_on_load);
+        .add_event::<BondsDespawnedEvent>();
 
-    info!("Bond detection and rendering systems registered");
+    info!("Bond resources registered");
 }
 
 #[cfg(test)]
@@ -529,11 +359,58 @@ mod tests {
     }
 
     #[test]
+    fn test_should_bond_within_range() {
+        let config = BondDetectionConfig::default();
+        let bonded = config.should_bond(Element::C, Element::C, 0, 0, 1.54);
+        assert!(bonded, "C-C at 1.54 A should be bonded");
+    }
+
+    #[test]
+    fn test_should_bond_too_far() {
+        let config = BondDetectionConfig::default();
+        let bonded = config.should_bond(Element::C, Element::C, 0, 0, 5.0);
+        assert!(!bonded, "C-C at 5.0 A should NOT be bonded");
+    }
+
+    #[test]
+    fn test_should_bond_same_residue_only() {
+        let config = BondDetectionConfig {
+            same_residue_only: true,
+            ..Default::default()
+        };
+        let bonded = config.should_bond(Element::C, Element::N, 0, 1, 1.47);
+        assert!(!bonded, "Different residues should not bond when same_residue_only");
+    }
+
+    #[test]
+    fn test_bond_type_disulfide() {
+        let config = BondDetectionConfig::default();
+        assert_eq!(
+            config.determine_bond_type(Element::S, Element::S),
+            BondType::Disulfide
+        );
+    }
+
+    #[test]
     fn test_bond_entities() {
         let mut entities = BondEntities::default();
         assert!(entities.entities.is_empty());
 
         entities.entities.insert((0, 1), Entity::PLACEHOLDER);
         assert_eq!(entities.entities.len(), 1);
+    }
+
+    #[test]
+    fn test_compute_bond_rotation_identity() {
+        let rot = compute_bond_rotation(Vec3::Y, 1.0);
+        let diff = rot.angle_between(Quat::IDENTITY);
+        assert!(diff < 0.001, "Y-aligned bond should give identity rotation");
+    }
+
+    #[test]
+    fn test_compute_bond_rotation_flipped() {
+        let rot = compute_bond_rotation(-Vec3::Y, 1.0);
+        let diff = rot.angle_between(Quat::from_rotation_x(std::f32::consts::PI));
+        assert!(diff < 0.001, "Negative Y should give PI rotation");
     }
 }

@@ -2,7 +2,7 @@
 //!
 //! This system creates Bevy entities for atoms and manages their lifecycle.
 
-use crate::core::atom::Atom;
+use crate::core::atom::{Atom, Element};
 use crate::core::trajectory::FrameData;
 use crate::rendering;
 use bevy::prelude::*;
@@ -34,7 +34,8 @@ pub struct AtomsSpawnedEvent {
 #[derive(Event, Debug)]
 pub struct AtomsDespawnedEvent;
 
-/// Internal function to spawn atoms from frame data
+/// Internal function to spawn atoms from frame data.
+/// Caches one mesh and one material per element to avoid duplicate GPU allocations.
 fn spawn_atoms_from_frame_internal(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -45,23 +46,32 @@ fn spawn_atoms_from_frame_internal(
     info!("Spawning {} atoms", atom_data.len());
 
     let mut entity_map = HashMap::new();
+    let mut mesh_cache: HashMap<Element, Handle<Mesh>> = HashMap::new();
+    let mut material_cache: HashMap<Element, Handle<StandardMaterial>> = HashMap::new();
 
     for atom_info in atom_data {
         if let Some(position) = frame_data.get_position(atom_info.id) {
-            // Generate mesh for this atom type
-            let radius = atom_info.element.vdw_radius() * 0.5; // Use 50% of VDW radius for visibility
-            let mesh = meshes.add(rendering::generate_atom_mesh(radius));
+            let mesh = mesh_cache
+                .entry(atom_info.element)
+                .or_insert_with(|| {
+                    let radius = atom_info.element.vdw_radius() * 0.5;
+                    meshes.add(rendering::generate_atom_mesh(radius))
+                })
+                .clone();
 
-            // Create material with CPK color
-            let color = atom_info.element.cpk_color();
-            let material = materials.add(StandardMaterial {
-                base_color: Color::srgb(color[0], color[1], color[2]),
-                metallic: 0.1,
-                perceptual_roughness: 0.2,
-                ..default()
-            });
+            let material = material_cache
+                .entry(atom_info.element)
+                .or_insert_with(|| {
+                    let color = atom_info.element.cpk_color();
+                    materials.add(StandardMaterial {
+                        base_color: Color::srgb(color[0], color[1], color[2]),
+                        metallic: 0.1,
+                        perceptual_roughness: 0.2,
+                        ..default()
+                    })
+                })
+                .clone();
 
-            // Spawn the atom entity
             let entity = commands
                 .spawn((
                     PbrBundle {
@@ -84,17 +94,20 @@ fn spawn_atoms_from_frame_internal(
                         occupancy: atom_info.occupancy,
                         name: atom_info.name.clone(),
                     },
-                    // Enable picking for this atom
                     PickableBundle::default(),
                 ))
                 .id();
 
-            // Track the entity
             entity_map.insert(atom_info.id, entity);
         }
     }
 
-    info!("Spawned {} atom entities", entity_map.len());
+    info!(
+        "Spawned {} atom entities ({} unique meshes, {} unique materials)",
+        entity_map.len(),
+        mesh_cache.len(),
+        material_cache.len()
+    );
     entity_map
 }
 
@@ -214,15 +227,13 @@ pub fn center_camera_on_file_load(
     }
 }
 
-/// Register all spawning systems
+/// Register spawning resources and events. Systems are registered centrally in systems::register.
 pub fn register(app: &mut App) {
     app.init_resource::<AtomEntities>()
         .add_event::<AtomsSpawnedEvent>()
-        .add_event::<AtomsDespawnedEvent>()
-        .add_systems(Update, spawn_atoms_on_load)
-        .add_systems(Update, center_camera_on_file_load);
+        .add_event::<AtomsDespawnedEvent>();
 
-    info!("Spawning systems registered");
+    info!("Spawning resources registered");
 }
 
 #[cfg(test)]

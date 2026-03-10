@@ -28,7 +28,7 @@ use std::path::Path;
 const SUPPORTED_EXTENSIONS: &[&str] = &["xyz", "pdb", "gro", "dcd", "cif", "mmcif", "mcif"];
 
 /// Extensions that have implemented parsers (loadable)
-const LOADABLE_EXTENSIONS: &[&str] = &["xyz", "pdb"];
+const LOADABLE_EXTENSIONS: &[&str] = &["xyz", "pdb", "gro"];
 
 /// Resource holding receiver for async file picker results
 #[derive(Resource, Default)]

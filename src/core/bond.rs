@@ -220,6 +220,7 @@ pub fn detect_bonds(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::prelude::Vec3;
     use crate::core::atom::{Element, AtomData};
 
     #[test]
@@ -234,8 +235,8 @@ mod tests {
     #[test]
     fn test_detect_bonds() {
         let mut atoms = HashMap::new();
-        atoms.insert(0, glam::Vec3::new(0.0, 0.0, 0.0));
-        atoms.insert(1, glam::Vec3::new(1.09, 0.0, 0.0));
+        atoms.insert(0, Vec3::new(0.0, 0.0, 0.0));
+        atoms.insert(1, Vec3::new(1.09, 0.0, 0.0));
 
         let mut atom_data = HashMap::new();
         atom_data.insert(0, AtomData::new(0, Element::C, 0, "MET".into(), "A".into(), "CA".into()));
@@ -243,7 +244,7 @@ mod tests {
 
         let bonds = detect_bonds(&atoms, &atom_data, 0.2);
         assert_eq!(bonds.len(), 1);
-        assert_eq!(bonds[0].atom_a_id, 0);
-        assert_eq!(bonds[0].atom_b_id, 1);
+        let ids = (bonds[0].atom_a_id.min(bonds[0].atom_b_id), bonds[0].atom_a_id.max(bonds[0].atom_b_id));
+        assert_eq!(ids, (0, 1));
     }
 }

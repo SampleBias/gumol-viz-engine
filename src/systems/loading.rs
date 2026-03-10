@@ -452,7 +452,7 @@ pub fn print_simulation_data(sim_data: Res<SimulationData>) {
     }
 }
 
-/// Register all loading systems
+/// Register loading resources and events. Systems are registered centrally in systems::register.
 pub fn register(app: &mut App) {
     let cli_path = std::env::args()
         .nth(1)
@@ -462,12 +462,9 @@ pub fn register(app: &mut App) {
         .insert_resource(CliFileArg(cli_path))
         .add_event::<LoadFileEvent>()
         .add_event::<FileLoadedEvent>()
-        .add_event::<FileLoadErrorEvent>()
-        .add_systems(Startup, load_cli_file)
-        .add_systems(Update, handle_load_file_events)
-        .add_systems(Update, print_simulation_data);
+        .add_event::<FileLoadErrorEvent>();
 
-    info!("Loading systems registered");
+    info!("Loading resources registered");
 }
 
 #[cfg(test)]

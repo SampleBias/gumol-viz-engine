@@ -86,6 +86,19 @@ impl Default for RenderMode {
 }
 
 impl RenderMode {
+    /// All render modes in cycle order
+    pub const ALL: &'static [RenderMode] = &[
+        RenderMode::CPK,
+        RenderMode::BallAndStick,
+        RenderMode::Licorice,
+        RenderMode::Wireframe,
+        RenderMode::Surface,
+        RenderMode::Cartoon,
+        RenderMode::Tube,
+        RenderMode::Trace,
+        RenderMode::Points,
+    ];
+
     /// Get the display name for this render mode
     pub fn name(&self) -> &'static str {
         match self {

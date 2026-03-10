@@ -71,7 +71,6 @@ impl Plugin for GumolVizPlugin {
         core::register(app);
         io::register(app);
         rendering::register(app);
-        rendering::instanced::register(app); // NEW: Instanced rendering
         systems::register(app);
         camera::register(app);
         interaction::register(app);

@@ -2,7 +2,9 @@
 //!
 //! This system manages switching between different rendering modes for atoms and bonds.
 //! It uses the RenderMode enum from core::visualization and applies global settings.
+//! Systems only run when VisualizationConfig has changed to avoid per-frame iteration.
 
+use crate::core::bond::Bond;
 use crate::core::visualization::{RenderMode, VisualizationConfig};
 use bevy::prelude::*;
 
@@ -13,37 +15,15 @@ pub struct VisualizationModeChangedEvent {
     pub new_mode: RenderMode,
 }
 
-/// Event sent when atom scale changes
-#[derive(Event, Debug)]
-pub struct AtomScaleChangedEvent {
-    pub old_scale: f32,
-    pub new_scale: f32,
-}
-
-/// Event sent when bond scale changes
-#[derive(Event, Debug)]
-pub struct BondScaleChangedEvent {
-    pub old_scale: f32,
-    pub new_scale: f32,
-}
-
-/// Event sent when atom visibility changes
-#[derive(Event, Debug)]
-pub struct AtomVisibilityChangedEvent {
-    pub visible: bool,
-}
-
-/// Event sent when bond visibility changes
-#[derive(Event, Debug)]
-pub struct BondVisibilityChangedEvent {
-    pub visible: bool,
-}
-
-/// Update atom visibility based on config
+/// Update atom visibility based on config (only when config changes)
 pub fn update_atom_visibility(
     config: Res<VisualizationConfig>,
     mut atom_query: Query<(&mut Visibility, &crate::systems::spawning::SpawnedAtom)>,
 ) {
+    if !config.is_changed() {
+        return;
+    }
+
     let should_show = config.show_atoms && config.render_mode.shows_atoms();
 
     for (mut visibility, _spawned_atom) in atom_query.iter_mut() {
@@ -55,11 +35,16 @@ pub fn update_atom_visibility(
     }
 }
 
-/// Update bond visibility based on config
+/// Update bond visibility based on config (only when config changes).
+/// Filters on `With<Bond>` so only bond entities are affected.
 pub fn update_bond_visibility(
     config: Res<VisualizationConfig>,
-    mut bond_query: Query<&mut Visibility, Without<crate::systems::spawning::SpawnedAtom>>,
+    mut bond_query: Query<&mut Visibility, With<Bond>>,
 ) {
+    if !config.is_changed() {
+        return;
+    }
+
     let should_show = config.show_bonds && config.render_mode.shows_bonds();
 
     for mut visibility in bond_query.iter_mut() {
@@ -71,117 +56,40 @@ pub fn update_bond_visibility(
     }
 }
 
-/// Update atom scale based on render mode and config
+/// Update atom scale based on render mode and config (only when config changes).
+/// The base mesh is generated at 50% VDW radius, so `overall_scale` is applied uniformly.
 pub fn update_atom_scale(
     config: Res<VisualizationConfig>,
-    atom_entities: Res<crate::systems::spawning::AtomEntities>,
-    mut atom_query: Query<(&crate::core::atom::Atom, &mut Transform)>,
+    mut atom_query: Query<&mut Transform, With<crate::systems::spawning::SpawnedAtom>>,
 ) {
+    if !config.is_changed() {
+        return;
+    }
+
     let mode_scale = config.render_mode.atom_scale();
     let overall_scale = mode_scale * config.atom_scale;
 
-    for (_atom_id, &entity) in atom_entities.entities.iter() {
-        if let Ok((atom, mut transform)) = atom_query.get_mut(entity) {
-            let base_radius = atom.element.vdw_radius();
-            let scale_factor = overall_scale / base_radius;
-
-            transform.scale = Vec3::splat(scale_factor);
-        }
+    for mut transform in atom_query.iter_mut() {
+        transform.scale = Vec3::splat(overall_scale);
     }
 }
 
-/// Update bond thickness based on render mode and config
+/// Update bond thickness based on render mode and config (only when config changes)
 pub fn update_bond_scale(
     config: Res<VisualizationConfig>,
-    bond_entities: Res<crate::systems::bonds::BondEntities>,
-    mut bond_query: Query<&mut Transform>,
+    mut bond_query: Query<&mut Transform, With<Bond>>,
 ) {
+    if !config.is_changed() {
+        return;
+    }
+
     let mode_thickness = config.render_mode.bond_thickness();
     let overall_thickness = mode_thickness * config.bond_scale;
 
-    for (_bond_id, &entity) in bond_entities.entities.iter() {
-        if let Ok(mut transform) = bond_query.get_mut(entity) {
-            // Scale the cylinder along X and Y (Z is the length)
-            transform.scale.x = overall_thickness;
-            transform.scale.y = overall_thickness;
-        }
+    for mut transform in bond_query.iter_mut() {
+        transform.scale.x = overall_thickness;
+        transform.scale.y = overall_thickness;
     }
-}
-
-/// Set visualization mode and trigger update events
-pub fn set_render_mode(
-    mut config: ResMut<VisualizationConfig>,
-    mut mode_events: EventWriter<VisualizationModeChangedEvent>,
-    mode: RenderMode,
-) {
-    if config.render_mode != mode {
-        let old_mode = config.render_mode;
-        config.render_mode = mode;
-
-        mode_events.send(VisualizationModeChangedEvent { old_mode, new_mode: mode });
-
-        info!("Visualization mode changed: {:?} -> {:?}", old_mode, mode);
-    }
-}
-
-/// Set atom scale and trigger update events
-pub fn set_atom_scale(
-    mut config: ResMut<VisualizationConfig>,
-    mut scale_events: EventWriter<AtomScaleChangedEvent>,
-    scale: f32,
-) {
-    let old_scale = config.atom_scale;
-    config.atom_scale = scale.clamp(0.1, 2.0);
-
-    scale_events.send(AtomScaleChangedEvent {
-        old_scale,
-        new_scale: config.atom_scale,
-    });
-
-    info!("Atom scale changed: {:.2} -> {:.2}", old_scale, config.atom_scale);
-}
-
-/// Set bond scale and trigger update events
-pub fn set_bond_scale(
-    mut config: ResMut<VisualizationConfig>,
-    mut scale_events: EventWriter<BondScaleChangedEvent>,
-    scale: f32,
-) {
-    let old_scale = config.bond_scale;
-    config.bond_scale = scale.clamp(0.1, 3.0);
-
-    scale_events.send(BondScaleChangedEvent {
-        old_scale,
-        new_scale: config.bond_scale,
-    });
-
-    info!("Bond scale changed: {:.2} -> {:.2}", old_scale, config.bond_scale);
-}
-
-/// Set atom visibility and trigger update events
-pub fn set_atom_visibility(
-    mut config: ResMut<VisualizationConfig>,
-    mut visibility_events: EventWriter<AtomVisibilityChangedEvent>,
-    visible: bool,
-) {
-    config.show_atoms = visible;
-
-    visibility_events.send(AtomVisibilityChangedEvent { visible });
-
-    info!("Atom visibility changed: {}", visible);
-}
-
-/// Set bond visibility and trigger update events
-pub fn set_bond_visibility(
-    mut config: ResMut<VisualizationConfig>,
-    mut visibility_events: EventWriter<BondVisibilityChangedEvent>,
-    visible: bool,
-) {
-    config.show_bonds = visible;
-
-    visibility_events.send(BondVisibilityChangedEvent { visible });
-
-    info!("Bond visibility changed: {}", visible);
 }
 
 /// Cycle through visualization modes
@@ -189,17 +97,7 @@ pub fn cycle_render_mode(
     mut config: ResMut<VisualizationConfig>,
     mut mode_events: EventWriter<VisualizationModeChangedEvent>,
 ) {
-    let modes = [
-        RenderMode::CPK,
-        RenderMode::BallAndStick,
-        RenderMode::Licorice,
-        RenderMode::Wireframe,
-        RenderMode::Surface,
-        RenderMode::Cartoon,
-        RenderMode::Tube,
-        RenderMode::Trace,
-        RenderMode::Points,
-    ];
+    let modes = RenderMode::ALL;
 
     let current_idx = modes
         .iter()
@@ -211,25 +109,20 @@ pub fn cycle_render_mode(
     let old_mode = config.render_mode;
     config.render_mode = next_mode;
 
-    mode_events.send(VisualizationModeChangedEvent { old_mode, new_mode: next_mode });
+    mode_events.send(VisualizationModeChangedEvent {
+        old_mode,
+        new_mode: next_mode,
+    });
 
     info!("Cycled visualization mode: {:?} -> {:?}", old_mode, next_mode);
 }
 
-/// Register all visualization systems
+/// Register visualization resources and events. Systems are registered centrally in systems::register.
 pub fn register(app: &mut App) {
     app.init_resource::<VisualizationConfig>()
-        .add_event::<VisualizationModeChangedEvent>()
-        .add_event::<AtomScaleChangedEvent>()
-        .add_event::<BondScaleChangedEvent>()
-        .add_event::<AtomVisibilityChangedEvent>()
-        .add_event::<BondVisibilityChangedEvent>()
-        .add_systems(Update, update_atom_visibility)
-        .add_systems(Update, update_bond_visibility)
-        .add_systems(Update, update_atom_scale)
-        .add_systems(Update, update_bond_scale);
+        .add_event::<VisualizationModeChangedEvent>();
 
-    info!("Visualization systems registered");
+    info!("Visualization resources registered");
 }
 
 #[cfg(test)]
@@ -237,52 +130,56 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_render_mode_cycle() {
-        let modes = [
-            RenderMode::CPK,
-            RenderMode::BallAndStick,
-            RenderMode::Licorice,
-            RenderMode::Wireframe,
-            RenderMode::Surface,
-            RenderMode::Cartoon,
-            RenderMode::Tube,
-            RenderMode::Trace,
-            RenderMode::Points,
-        ];
+    fn test_render_mode_cycle_wraps_around() {
+        let modes = RenderMode::ALL;
+        let last_mode = modes[modes.len() - 1];
+        let first_mode = modes[0];
 
-        // Test that we can cycle through all modes
-        for (i, &mode) in modes.iter().enumerate() {
-            assert_eq!(modes[i], mode);
+        let idx = modes.iter().position(|&m| m == last_mode).unwrap();
+        let next_idx = (idx + 1) % modes.len();
+        assert_eq!(modes[next_idx], first_mode);
+    }
+
+    #[test]
+    fn test_render_mode_all_modes_reachable() {
+        let modes = RenderMode::ALL;
+        assert!(modes.len() >= 9);
+
+        for window in modes.windows(2) {
+            assert_ne!(window[0], window[1], "Adjacent modes must be different");
         }
     }
 
     #[test]
-    fn test_clamp_atom_scale() {
-        // Test minimum
-        let scale_min = 0.05.clamp(0.1, 2.0);
-        assert_eq!(scale_min, 0.1);
+    fn test_overall_scale_computation() {
+        let config = VisualizationConfig::default();
+        let mode_scale = config.render_mode.atom_scale();
+        let overall = mode_scale * config.atom_scale;
+        assert_eq!(overall, 1.0, "CPK mode at 1.0 atom_scale should give 1.0");
 
-        // Test maximum
-        let scale_max = 3.0.clamp(0.1, 2.0);
-        assert_eq!(scale_max, 2.0);
-
-        // Test in range
-        let scale_mid = 1.0.clamp(0.1, 2.0);
-        assert_eq!(scale_mid, 1.0);
+        let ball_stick_scale = RenderMode::BallAndStick.atom_scale();
+        assert!(
+            ball_stick_scale < RenderMode::CPK.atom_scale(),
+            "Ball-and-stick atoms should be smaller than CPK"
+        );
     }
 
     #[test]
-    fn test_clamp_bond_scale() {
-        // Test minimum
-        let scale_min = 0.05.clamp(0.1, 3.0);
-        assert_eq!(scale_min, 0.1);
+    fn test_visibility_logic() {
+        assert!(RenderMode::CPK.shows_atoms());
+        assert!(!RenderMode::CPK.shows_bonds());
 
-        // Test maximum
-        let scale_max = 4.0.clamp(0.1, 3.0);
-        assert_eq!(scale_max, 3.0);
+        assert!(RenderMode::BallAndStick.shows_atoms());
+        assert!(RenderMode::BallAndStick.shows_bonds());
 
-        // Test in range
-        let scale_mid = 1.5.clamp(0.1, 3.0);
-        assert_eq!(scale_mid, 1.5);
+        assert!(!RenderMode::Wireframe.shows_atoms());
+        assert!(RenderMode::Wireframe.shows_bonds());
+    }
+
+    #[test]
+    fn test_bond_thickness_zero_when_no_bonds() {
+        assert_eq!(RenderMode::CPK.bond_thickness(), 0.0);
+        assert_eq!(RenderMode::Points.bond_thickness(), 0.0);
+        assert!(RenderMode::BallAndStick.bond_thickness() > 0.0);
     }
 }

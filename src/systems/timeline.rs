@@ -71,11 +71,17 @@ pub fn update_timeline(
     }
 }
 
-/// Update atom positions based on current timeline frame
+/// Update atom positions based on current timeline frame.
+/// Keeps both Transform.translation and Atom.position in sync so that
+/// bond detection and other systems reading Atom.position see current data.
 pub fn update_atom_positions_from_timeline(
     sim_data: Res<crate::systems::loading::SimulationData>,
     timeline: Res<TimelineState>,
-    mut atom_query: Query<(&crate::systems::spawning::SpawnedAtom, &mut Transform)>,
+    mut atom_query: Query<(
+        &crate::systems::spawning::SpawnedAtom,
+        &mut Transform,
+        &mut crate::core::atom::Atom,
+    )>,
 ) {
     if !sim_data.loaded || sim_data.num_frames() == 0 {
         return;
@@ -83,13 +89,11 @@ pub fn update_atom_positions_from_timeline(
 
     let current_frame = timeline.current_frame;
 
-    // Get current frame
     let current_frame_data = match sim_data.trajectory.get_frame(current_frame) {
         Some(frame) => frame,
         None => return,
     };
 
-    // If interpolating and not at the last frame, get the next frame
     let next_frame_data = if timeline.interpolate && timeline.interpolation_factor > 0.0 {
         let next_frame = (current_frame + 1).min(sim_data.num_frames() - 1);
         sim_data.trajectory.get_frame(next_frame)
@@ -97,8 +101,7 @@ pub fn update_atom_positions_from_timeline(
         None
     };
 
-    // Update positions
-    for (spawned_atom, mut transform) in atom_query.iter_mut() {
+    for (spawned_atom, mut transform, mut atom) in atom_query.iter_mut() {
         let atom_id = spawned_atom.atom_id;
 
         let position = if let (Some(current), Some(next), Some(alpha)) = (
@@ -106,10 +109,8 @@ pub fn update_atom_positions_from_timeline(
             next_frame_data.and_then(|f| f.get_position(atom_id)),
             Some(timeline.interpolation_factor).filter(|_| timeline.interpolate),
         ) {
-            // Interpolate between frames
             current.lerp(next, alpha)
         } else {
-            // No interpolation, use current frame
             match current_frame_data.get_position(atom_id) {
                 Some(pos) => pos,
                 None => continue,
@@ -117,6 +118,7 @@ pub fn update_atom_positions_from_timeline(
         };
 
         transform.translation = position;
+        atom.position = position;
     }
 }
 
@@ -223,18 +225,14 @@ pub struct FrameChangedEvent {
     pub new_frame: usize,
 }
 
-/// Register all timeline systems
+/// Register timeline resources and events. Systems are registered centrally in systems::register.
 pub fn register(app: &mut App) {
     app.init_resource::<TimelineState>()
         .add_event::<PlaybackStartedEvent>()
         .add_event::<PlaybackStoppedEvent>()
-        .add_event::<FrameChangedEvent>()
-        .add_systems(Update, update_timeline)
-        .add_systems(Update, update_atom_positions_from_timeline)
-        .add_systems(Update, handle_timeline_input)
-        .add_systems(Update, update_timeline_on_load);
+        .add_event::<FrameChangedEvent>();
 
-    info!("Timeline systems registered");
+    info!("Timeline resources registered");
 }
 
 #[cfg(test)]
