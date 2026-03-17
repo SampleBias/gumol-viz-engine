@@ -56,7 +56,7 @@ nom = "7.1"
 byteorder = "1.5"
 
 # Zero-copy casting
-bytemuck = "1.18"
+bytemuck = { version = "1.18", features = ["derive"] }
 
 # XML parsing (for mmCIF)
 quick-xml = "0.36"

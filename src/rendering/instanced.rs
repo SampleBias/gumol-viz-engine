@@ -1,85 +1,110 @@
-//! Instanced rendering system for atoms
+//! GPU-instanced atom rendering pipeline.
 //!
-//! This system implements GPU instancing to render thousands of atoms
-//! with minimal draw calls (one per element instead of one per atom).
+//! Groups atoms by element and renders all atoms of the same element in a
+//! single draw call (one entity per element ≈ 118 draw calls instead of N).
+//! Uses a custom WGSL shader with per-instance position, scale, and color
+//! stored in a vertex buffer with `VertexStepMode::Instance`.
 
 use crate::core::atom::{AtomData, Element};
-use crate::core::trajectory::FrameData;
+use crate::core::trajectory::{FrameData, TimelineState};
 use crate::rendering::generate_atom_mesh;
+use bevy::core_pipeline::core_3d::Transparent3d;
+use bevy::ecs::{query::QueryItem, system::SystemParamItem};
+use bevy::pbr::{
+    MeshPipeline, MeshPipelineKey, RenderMeshInstances, SetMeshBindGroup, SetMeshViewBindGroup,
+};
 use bevy::prelude::*;
+use bevy::render::{
+    extract_component::{ExtractComponent, ExtractComponentPlugin},
+    mesh::{GpuBufferInfo, GpuMesh, MeshVertexBufferLayoutRef},
+    render_asset::RenderAssets,
+    render_phase::{
+        AddRenderCommand, DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand,
+        RenderCommandResult, SetItemPipeline, TrackedRenderPass, ViewSortedRenderPhases,
+    },
+    render_resource::*,
+    renderer::RenderDevice,
+    view::{ExtractedView, NoFrustumCulling},
+    Render, RenderApp, RenderSet,
+};
+use bytemuck::{Pod, Zeroable};
 use std::collections::HashMap;
 
 // ============================================================================
-// INSTANCED RENDERING COMPONENTS
+// INSTANCE DATA
 // ============================================================================
 
-/// Instance data for each atom (sent to GPU for instanced rendering)
-#[derive(bevy::render::render_resource::ShaderType, Clone, Copy, Default, Debug, PartialEq)]
+/// Per-atom data packed into a GPU vertex buffer (32 bytes, tightly packed).
+#[derive(Clone, Copy, Pod, Zeroable, Debug, PartialEq)]
+#[repr(C)]
 pub struct AtomInstanceData {
-    /// Atom position in world space
     pub position: Vec3,
-    /// Scale factor (multiplied with base mesh radius)
     pub scale: f32,
-    /// Atom color (RGBA)
     pub color: Vec4,
-    /// Padding for 16-byte alignment
-    pub _padding: Vec3,
 }
 
-/// Component holding instance data for instanced atom rendering
-#[derive(Component, Default, Debug)]
+// ============================================================================
+// APP-WORLD COMPONENTS / RESOURCES / EVENTS
+// ============================================================================
+
+/// Holds all instance data for one element.  Extracted to the render world
+/// each frame so the GPU buffer can be rebuilt when positions change.
+#[derive(Component, Clone, Debug)]
 pub struct InstancedAtomMesh {
-    /// All instances of atoms of this element type
     pub instances: Vec<AtomInstanceData>,
 }
 
-/// Marker component for instanced atom entities
+impl ExtractComponent for InstancedAtomMesh {
+    type QueryData = &'static InstancedAtomMesh;
+    type QueryFilter = ();
+    type Out = Self;
+
+    fn extract_component(item: QueryItem<'_, Self::QueryData>) -> Option<Self> {
+        Some(InstancedAtomMesh {
+            instances: item.instances.clone(),
+        })
+    }
+}
+
+/// Marker identifying which element an instanced entity represents.
 #[derive(Component)]
 pub struct InstancedAtomEntity {
-    /// Element type for this instanced entity
     pub element: Element,
 }
 
-/// Resource tracking instanced atom entities
+/// Tracks per-element entities and total atom count.
 #[derive(Resource, Default, Debug)]
 pub struct InstancedAtomEntities {
-    /// Map from element to entity handle
     pub entities: HashMap<Element, Entity>,
-    /// Total number of atoms across all instanced entities
     pub total_atoms: usize,
 }
 
-/// Event sent when instanced atoms are spawned
+/// Fired after instanced atoms are spawned.
 #[derive(Event, Debug)]
 pub struct InstancedAtomsSpawnedEvent {
-    /// Number of atoms spawned
     pub count: usize,
-    /// Number of draw calls (should equal number of unique elements)
     pub draw_calls: usize,
 }
 
-/// Spawn atoms using instanced rendering (ONE entity per element)
-///
-/// This is the core optimization: instead of spawning N entities for N atoms,
-/// we group atoms by element and spawn ONE entity per element with N instances.
-/// This reduces draw calls from N to ~118 (number of elements).
+// ============================================================================
+// APP-WORLD SYSTEMS
+// ============================================================================
+
+/// Spawn one entity per element with instance data for all atoms of that element.
 pub fn spawn_atoms_instanced_internal(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
     frame_data: &FrameData,
     atom_data: &[AtomData],
-) -> HashMap<u32, Entity> {
-    info!("Spawning {} atoms with instanced rendering", atom_data.len());
+) -> HashMap<Element, Entity> {
+    info!(
+        "Spawning {} atoms with instanced rendering",
+        atom_data.len()
+    );
 
-    // Track which entity each atom belongs to
-    let mut entity_map = HashMap::new();
-
-    // Step 1: Group atoms by element (118 elements maximum)
     let mut atoms_by_element: HashMap<Element, Vec<&AtomData>> = HashMap::new();
-
     for atom_info in atom_data {
-        if let Some(_position) = frame_data.get_position(atom_info.id) {
+        if frame_data.get_position(atom_info.id).is_some() {
             atoms_by_element
                 .entry(atom_info.element)
                 .or_default()
@@ -87,201 +112,102 @@ pub fn spawn_atoms_instanced_internal(
         }
     }
 
-    info!("Grouped atoms into {} element types", atoms_by_element.len());
+    info!("Grouped into {} element types", atoms_by_element.len());
 
-    // Step 2: Spawn ONE instanced entity per element
-    for (element, atoms) in atoms_by_element {
-        // Generate mesh ONCE per element (not per atom!)
-        let radius = element.vdw_radius() * 0.5; // Use 50% of VDW radius
+    let mut entity_map = HashMap::new();
+
+    for (element, atoms) in &atoms_by_element {
+        let radius = element.vdw_radius() * 0.5;
         let mesh = meshes.add(generate_atom_mesh(radius));
-
-        // Get CPK color for this element
         let color_rgb = element.cpk_color();
 
-        // Create instance data for ALL atoms of this element
         let instances: Vec<AtomInstanceData> = atoms
             .iter()
-            .map(|atom_info| {
-                let position = frame_data
-                    .get_position(atom_info.id)
-                    .unwrap_or(Vec3::ZERO);
-
+            .map(|a| {
+                let position = frame_data.get_position(a.id).unwrap_or(Vec3::ZERO);
                 AtomInstanceData {
                     position,
                     scale: 1.0,
                     color: Vec4::new(color_rgb[0], color_rgb[1], color_rgb[2], 1.0),
-                    _padding: Vec3::ZERO,
                 }
             })
             .collect();
 
-        info!(
-            "Created {} instances for element {:?} ({})",
-            instances.len(),
-            element,
-            element.symbol()
-        );
-
-        // Create material
-        // Note: Color is handled by instance data, so we use white base
-        let material = materials.add(StandardMaterial {
-            base_color: Color::WHITE,
-            unlit: false,
-            metallic: 0.1,
-            perceptual_roughness: 0.2,
-            ..default()
-        });
-
-        // Spawn ONE entity with instancing
         let entity = commands
             .spawn((
-                PbrBundle {
-                    mesh,
-                    material,
-                    transform: Transform::from_translation(Vec3::ZERO),
-                    ..default()
-                },
+                mesh,
+                SpatialBundle::INHERITED_IDENTITY,
                 InstancedAtomMesh { instances },
-                InstancedAtomEntity { element },
+                InstancedAtomEntity { element: *element },
+                NoFrustumCulling,
             ))
             .id();
 
-        // Track entity for all atoms of this element
-        for atom_info in atoms {
-            entity_map.insert(atom_info.id, entity);
-        }
-
-        info!("Spawned instanced entity for element {:?}", element);
+        entity_map.insert(*element, entity);
     }
 
     info!(
-        "Total instanced entities: {} (down from {} atoms)",
+        "Instanced: {} draw calls for {} atoms ({:.1}% reduction)",
         entity_map.len(),
-        atom_data.len()
-    );
-    info!(
-        "Draw call reduction: {:.1}%",
-        (1.0 - entity_map.len() as f32 / atom_data.len() as f32) * 100.0
+        atom_data.len(),
+        (1.0 - entity_map.len() as f64 / atom_data.len().max(1) as f64) * 100.0
     );
 
     entity_map
 }
 
-/// System to spawn instanced atoms when simulation data is loaded
+/// System: spawn instanced atoms when a file finishes loading.
 pub fn spawn_instanced_atoms_on_load(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     sim_data: Res<crate::systems::loading::SimulationData>,
     mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
     mut instanced_entities: ResMut<InstancedAtomEntities>,
     mut spawned_event: EventWriter<InstancedAtomsSpawnedEvent>,
 ) {
-    // Check if atoms are already spawned
     if !instanced_entities.entities.is_empty() {
         return;
     }
 
-    // Check if we should spawn (any file loaded event)
     let should_spawn = file_loaded_events.read().next().is_some();
 
     if should_spawn && sim_data.loaded && !sim_data.atom_data.is_empty() {
-        info!(
-            "File loaded, spawning {} instanced atoms",
-            sim_data.atom_data.len()
-        );
-
-        // Get the first frame
         if let Some(first_frame) = sim_data.trajectory.get_frame(0) {
             let new_entities = spawn_atoms_instanced_internal(
                 &mut commands,
                 &mut meshes,
-                &mut materials,
                 first_frame,
                 &sim_data.atom_data,
             );
 
-            // Track entities by element
-            instanced_entities.entities.clear(); // Clear previous entities
-            // Note: For now we just track count, elements map can be built later
-            for (_atom_id, _entity) in new_entities.iter() {
-                // Element lookup would go here
-            }
+            let draw_calls = new_entities.len();
+            instanced_entities.entities = new_entities;
             instanced_entities.total_atoms = sim_data.atom_data.len();
 
-            // Send event
             spawned_event.send(InstancedAtomsSpawnedEvent {
-                count: instanced_entities.total_atoms,
-                draw_calls: new_entities.len(),
+                count: sim_data.atom_data.len(),
+                draw_calls,
             });
         }
     }
 }
 
-/// Clear all instanced atoms
-pub fn despawn_all_instanced_atoms(
-    mut commands: Commands,
-    mut instanced_entities: ResMut<InstancedAtomEntities>,
-) {
-    let count = instanced_entities.entities.len();
-
-    if count > 0 {
-        info!("Despawning {} instanced atom entities", count);
-
-        // Despawn all entities
-        for (_, entity) in instanced_entities.entities.drain() {
-            commands.entity(entity).despawn_recursive();
-        }
-
-        instanced_entities.total_atoms = 0;
-    }
-}
-
-/// Clear instanced atoms when new file is loaded
+/// System: clear instanced atoms when a new file is loaded.
 pub fn clear_instanced_atoms_on_load(
     mut commands: Commands,
     mut instanced_entities: ResMut<InstancedAtomEntities>,
     file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
 ) {
     if !file_loaded_events.is_empty() && !instanced_entities.entities.is_empty() {
-        // Despawn all instanced entities
         for (_, entity) in instanced_entities.entities.drain() {
             commands.entity(entity).despawn_recursive();
         }
-
         instanced_entities.total_atoms = 0;
-        info!("Instanced atoms cleared on file load");
+        info!("Cleared instanced atoms for new file load");
     }
 }
 
-/// Calculate the center of mass of all atoms (for camera centering)
-pub fn calculate_center_of_mass_instanced(
-    sim_data: Res<crate::systems::loading::SimulationData>,
-) -> Option<Vec3> {
-    if !sim_data.loaded || sim_data.atom_data.is_empty() {
-        return None;
-    }
-
-    if let Some(frame) = sim_data.trajectory.get_frame(0) {
-        let mut sum = Vec3::ZERO;
-        let mut count = 0;
-
-        for position in frame.positions.values() {
-            sum += *position;
-            count += 1;
-        }
-
-        if count > 0 {
-            Some(sum / count as f32)
-        } else {
-            None
-        }
-    } else {
-        None
-    }
-}
-
-/// Center the camera on the molecule when a file is loaded
+/// System: center the camera on the molecule after loading.
 pub fn center_camera_on_file_load_instanced(
     mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
     sim_data: Res<crate::systems::loading::SimulationData>,
@@ -291,49 +217,379 @@ pub fn center_camera_on_file_load_instanced(
         return;
     }
 
-    let center = calculate_center_of_mass_instanced(sim_data);
-
-    if let Some(center) = center {
-        for mut cam in camera_query.iter_mut() {
-            cam.focus = center;
-            cam.target_focus = center;
-            info!("Camera centered on molecule at {:?}", center);
+    if let Some(frame) = sim_data.trajectory.get_frame(0) {
+        let mut sum = Vec3::ZERO;
+        let mut count = 0;
+        for pos in frame.positions.values() {
+            sum += *pos;
+            count += 1;
+        }
+        if count > 0 {
+            let center = sum / count as f32;
+            for mut cam in camera_query.iter_mut() {
+                cam.focus = center;
+                cam.target_focus = center;
+                info!("Camera centered at {:?}", center);
+            }
         }
     }
 }
 
-/// Register all instanced rendering systems
+/// System: update instanced positions when the timeline frame changes.
+pub fn update_instanced_positions_from_timeline(
+    sim_data: Res<crate::systems::loading::SimulationData>,
+    timeline: Res<TimelineState>,
+    mut instanced_query: Query<(&InstancedAtomEntity, &mut InstancedAtomMesh)>,
+) {
+    if !timeline.is_changed() || !sim_data.loaded || sim_data.num_frames() == 0 {
+        return;
+    }
+
+    let current_frame = match sim_data.trajectory.get_frame(timeline.current_frame) {
+        Some(f) => f,
+        None => return,
+    };
+
+    let next_frame = if timeline.interpolate && timeline.interpolation_factor > 0.0 {
+        let next_idx = (timeline.current_frame + 1).min(sim_data.num_frames() - 1);
+        sim_data.trajectory.get_frame(next_idx)
+    } else {
+        None
+    };
+
+    for (entity_info, mut mesh) in instanced_query.iter_mut() {
+        let element = entity_info.element;
+
+        let element_atoms: Vec<&AtomData> = sim_data
+            .atom_data
+            .iter()
+            .filter(|a| a.element == element)
+            .collect();
+
+        for (i, atom_info) in element_atoms.iter().enumerate() {
+            if i >= mesh.instances.len() {
+                break;
+            }
+
+            let current_pos = match current_frame.get_position(atom_info.id) {
+                Some(p) => p,
+                None => continue,
+            };
+
+            let position = if let Some(nf) = next_frame {
+                if let Some(next_pos) = nf.get_position(atom_info.id) {
+                    current_pos.lerp(next_pos, timeline.interpolation_factor)
+                } else {
+                    current_pos
+                }
+            } else {
+                current_pos
+            };
+
+            mesh.instances[i].position = position;
+        }
+    }
+}
+
+// ============================================================================
+// RENDER PIPELINE
+// ============================================================================
+
+/// Bevy plugin that wires up the render-world side of instanced atom rendering.
+struct InstancedAtomRenderPlugin;
+
+impl Plugin for InstancedAtomRenderPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_plugins(ExtractComponentPlugin::<InstancedAtomMesh>::default());
+        app.sub_app_mut(RenderApp)
+            .add_render_command::<Transparent3d, DrawInstancedAtoms>()
+            .init_resource::<SpecializedMeshPipelines<InstancedAtomPipeline>>()
+            .add_systems(
+                Render,
+                (
+                    queue_instanced_atoms.in_set(RenderSet::QueueMeshes),
+                    prepare_instance_buffers.in_set(RenderSet::PrepareResources),
+                ),
+            );
+    }
+
+    fn finish(&self, app: &mut App) {
+        app.sub_app_mut(RenderApp)
+            .init_resource::<InstancedAtomPipeline>();
+    }
+}
+
+// --- Pipeline resource ---
+
+#[derive(Resource)]
+struct InstancedAtomPipeline {
+    shader: Handle<Shader>,
+    mesh_pipeline: MeshPipeline,
+}
+
+impl FromWorld for InstancedAtomPipeline {
+    fn from_world(world: &mut World) -> Self {
+        let mesh_pipeline = world.resource::<MeshPipeline>().clone();
+        InstancedAtomPipeline {
+            shader: world
+                .resource::<AssetServer>()
+                .load("shaders/instanced_atom.wgsl"),
+            mesh_pipeline,
+        }
+    }
+}
+
+impl SpecializedMeshPipeline for InstancedAtomPipeline {
+    type Key = MeshPipelineKey;
+
+    fn specialize(
+        &self,
+        key: Self::Key,
+        layout: &MeshVertexBufferLayoutRef,
+    ) -> Result<RenderPipelineDescriptor, SpecializedMeshPipelineError> {
+        let mut descriptor = self.mesh_pipeline.specialize(key, layout)?;
+
+        descriptor.vertex.shader = self.shader.clone();
+        descriptor.fragment.as_mut().unwrap().shader = self.shader.clone();
+
+        // Append instance vertex buffer (locations 3-5 complement the mesh's 0-2).
+        descriptor.vertex.buffers.push(VertexBufferLayout {
+            array_stride: std::mem::size_of::<AtomInstanceData>() as u64,
+            step_mode: VertexStepMode::Instance,
+            attributes: vec![
+                // i_pos: vec3<f32>
+                VertexAttribute {
+                    format: VertexFormat::Float32x3,
+                    offset: 0,
+                    shader_location: 3,
+                },
+                // i_scale: f32
+                VertexAttribute {
+                    format: VertexFormat::Float32,
+                    offset: VertexFormat::Float32x3.size(),
+                    shader_location: 4,
+                },
+                // i_color: vec4<f32>
+                VertexAttribute {
+                    format: VertexFormat::Float32x4,
+                    offset: VertexFormat::Float32x3.size() + VertexFormat::Float32.size(),
+                    shader_location: 5,
+                },
+            ],
+        });
+
+        Ok(descriptor)
+    }
+}
+
+// --- Queue ---
+
+#[allow(clippy::too_many_arguments)]
+fn queue_instanced_atoms(
+    transparent_3d_draw_functions: Res<DrawFunctions<Transparent3d>>,
+    custom_pipeline: Res<InstancedAtomPipeline>,
+    msaa: Res<Msaa>,
+    mut pipelines: ResMut<SpecializedMeshPipelines<InstancedAtomPipeline>>,
+    pipeline_cache: Res<PipelineCache>,
+    meshes: Res<RenderAssets<GpuMesh>>,
+    render_mesh_instances: Res<RenderMeshInstances>,
+    material_meshes: Query<Entity, With<InstancedAtomMesh>>,
+    mut transparent_render_phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
+    views: Query<Entity, With<ExtractedView>>,
+) {
+    let draw_custom = transparent_3d_draw_functions
+        .read()
+        .id::<DrawInstancedAtoms>();
+
+    for view in &views {
+        let Some(transparent_phase) = transparent_render_phases.get_mut(&view) else {
+            continue;
+        };
+
+        for entity in &material_meshes {
+            let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(entity) else {
+                continue;
+            };
+            let Some(mesh) = meshes.get(mesh_instance.mesh_asset_id) else {
+                continue;
+            };
+
+            let key = MeshPipelineKey::from_msaa_samples(msaa.samples())
+                | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology());
+
+            let pipeline = pipelines
+                .specialize(&pipeline_cache, &custom_pipeline, key, &mesh.layout)
+                .unwrap();
+
+            transparent_phase.add(Transparent3d {
+                entity,
+                pipeline,
+                draw_function: draw_custom,
+                distance: 0.0,
+                batch_range: 0..1,
+                extra_index: PhaseItemExtraIndex::NONE,
+            });
+        }
+    }
+}
+
+// --- Prepare GPU buffers ---
+
+#[derive(Component)]
+struct InstanceBuffer {
+    buffer: Buffer,
+    length: usize,
+}
+
+fn prepare_instance_buffers(
+    mut commands: Commands,
+    query: Query<(Entity, &InstancedAtomMesh)>,
+    render_device: Res<RenderDevice>,
+) {
+    for (entity, instance_data) in &query {
+        if instance_data.instances.is_empty() {
+            continue;
+        }
+
+        let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            label: Some("instanced_atom_buffer"),
+            contents: bytemuck::cast_slice(&instance_data.instances),
+            usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+        });
+
+        commands.entity(entity).insert(InstanceBuffer {
+            buffer,
+            length: instance_data.instances.len(),
+        });
+    }
+}
+
+// --- Draw command ---
+
+type DrawInstancedAtoms = (
+    SetItemPipeline,
+    SetMeshViewBindGroup<0>,
+    SetMeshBindGroup<1>,
+    DrawMeshInstanced,
+);
+
+struct DrawMeshInstanced;
+
+impl<P: PhaseItem> RenderCommand<P> for DrawMeshInstanced {
+    type Param = (
+        Res<'static, RenderAssets<GpuMesh>>,
+        Res<'static, RenderMeshInstances>,
+    );
+    type ViewQuery = ();
+    type ItemQuery = &'static InstanceBuffer;
+
+    #[inline]
+    fn render<'w>(
+        item: &P,
+        _view: (),
+        instance_buffer: Option<&'w InstanceBuffer>,
+        (meshes, render_mesh_instances): SystemParamItem<'w, '_, Self::Param>,
+        pass: &mut TrackedRenderPass<'w>,
+    ) -> RenderCommandResult {
+        let Some(mesh_instance) = render_mesh_instances
+            .into_inner()
+            .render_mesh_queue_data(item.entity())
+        else {
+            return RenderCommandResult::Failure;
+        };
+        let Some(gpu_mesh) = meshes.into_inner().get(mesh_instance.mesh_asset_id) else {
+            return RenderCommandResult::Failure;
+        };
+        let Some(instance_buffer) = instance_buffer else {
+            return RenderCommandResult::Failure;
+        };
+
+        pass.set_vertex_buffer(0, gpu_mesh.vertex_buffer.slice(..));
+        pass.set_vertex_buffer(1, instance_buffer.buffer.slice(..));
+
+        match &gpu_mesh.buffer_info {
+            GpuBufferInfo::Indexed {
+                buffer,
+                index_format,
+                count,
+            } => {
+                pass.set_index_buffer(buffer.slice(..), 0, *index_format);
+                pass.draw_indexed(0..*count, 0, 0..instance_buffer.length as u32);
+            }
+            GpuBufferInfo::NonIndexed => {
+                pass.draw(0..gpu_mesh.vertex_count, 0..instance_buffer.length as u32);
+            }
+        }
+
+        RenderCommandResult::Success
+    }
+}
+
+// ============================================================================
+// REGISTRATION
+// ============================================================================
+
+/// Register resources, events, and the render pipeline plugin.
+/// App-world update systems are registered centrally in `systems::register`.
 pub fn register(app: &mut App) {
     app.init_resource::<InstancedAtomEntities>()
         .add_event::<InstancedAtomsSpawnedEvent>()
-        .add_systems(Update, spawn_instanced_atoms_on_load)
-        .add_systems(Update, clear_instanced_atoms_on_load)
-        .add_systems(Update, center_camera_on_file_load_instanced);
+        .add_plugins(InstancedAtomRenderPlugin);
 
     info!("Instanced rendering plugin registered");
 }
+
+// ============================================================================
+// TESTS
+// ============================================================================
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_atom_instance_data_alignment() {
+    fn test_atom_instance_data_size() {
+        assert_eq!(
+            std::mem::size_of::<AtomInstanceData>(),
+            32,
+            "AtomInstanceData must be exactly 32 bytes for the GPU vertex buffer"
+        );
+    }
+
+    #[test]
+    fn test_atom_instance_data_fields() {
         let instance = AtomInstanceData {
             position: Vec3::new(1.0, 2.0, 3.0),
             scale: 1.5,
             color: Vec4::new(0.5, 0.5, 0.5, 1.0),
-            _padding: Vec3::ZERO,
         };
-
         assert_eq!(instance.position, Vec3::new(1.0, 2.0, 3.0));
         assert_eq!(instance.scale, 1.5);
+        assert_eq!(instance.color.w, 1.0);
     }
 
     #[test]
-    fn test_instanced_atom_entities() {
-        let mut entities = InstancedAtomEntities::default();
+    fn test_instanced_atom_entities_default() {
+        let entities = InstancedAtomEntities::default();
         assert!(entities.entities.is_empty());
         assert_eq!(entities.total_atoms, 0);
+    }
+
+    #[test]
+    fn test_bytemuck_cast() {
+        let instances = vec![
+            AtomInstanceData {
+                position: Vec3::ZERO,
+                scale: 1.0,
+                color: Vec4::ONE,
+            },
+            AtomInstanceData {
+                position: Vec3::X,
+                scale: 2.0,
+                color: Vec4::ZERO,
+            },
+        ];
+        let bytes: &[u8] = bytemuck::cast_slice(&instances);
+        assert_eq!(bytes.len(), 64);
     }
 }

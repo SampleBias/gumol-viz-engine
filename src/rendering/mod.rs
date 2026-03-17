@@ -11,7 +11,8 @@ const RENDER_ASSET_USAGES: bevy::render::render_asset::RenderAssetUsages =
     bevy::render::render_asset::RenderAssetUsages::RENDER_WORLD;
 
 /// Register all rendering systems
-pub fn register(_app: &mut App) {
+pub fn register(app: &mut App) {
+    instanced::register(app);
     info!("Rendering module registered");
 }
 
