@@ -14,7 +14,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use tracing::warn;
 
 /// Parsed atom data from a GRO line
 #[derive(Debug, Clone)]
@@ -178,7 +177,8 @@ impl GroParser {
 
     /// Parse a single atom line from GRO format
     pub fn parse_atom_line(line: &str, line_num: usize, atom_id: usize) -> IOResult<ParsedAtom> {
-        let line = line.trim();
+        // GRO is fixed-width; do not trim leading columns.
+        let line = line.trim_end();
 
         // Minimum required: resid(5) resname(5) atomname(5) atomnr(5) x(8.3) y(8.3) z(8.3)
         // Total minimum width: 5+5+5+5+8+8+8 = 44 characters
@@ -243,23 +243,8 @@ impl GroParser {
 
         let position = Vec3::new(x, y, z);
 
-        // Parse velocities if present (columns 45-52, 53-60, 61-68)
-        let velocity = if line.len() >= 68 {
-            let vx_str = &line[44..52].trim();
-            let vy_str = &line[52..60].trim();
-            let vz_str = &line[60..68].trim();
-
-            match (
-                vx_str.parse::<f32>(),
-                vy_str.parse::<f32>(),
-                vz_str.parse::<f32>(),
-            ) {
-                (Ok(vx), Ok(vy), Ok(vz)) => Some(Vec3::new(vx, vy, vz)),
-                _ => None,
-            }
-        } else {
-            None
-        };
+        // Parse velocities if present (8.4 fields at 44–67, with whitespace fallback).
+        let velocity = Self::parse_velocity_fields(line);
 
         // Determine element from atom name
         // GROMACS atom names typically start with the element symbol
@@ -277,33 +262,37 @@ impl GroParser {
 
     /// Determine element from atom name
     pub fn element_from_atom_name(atom_name: &str) -> Element {
-        // Remove leading numbers and non-letters
-        let name = atom_name.trim_start_matches(|c: char| c.is_digit(10));
-        let name = name.trim();
+        Element::from_atom_name(atom_name)
+    }
 
-        // Try 2-character element first
-        if name.len() >= 2 {
-            let two_char = &name[..2];
-            if let Ok(elem) = Element::from_symbol(two_char) {
-                return elem;
+    fn parse_velocity_fields(line: &str) -> Option<Vec3> {
+        if line.len() >= 68 {
+            let vx_str = line[44..52].trim();
+            let vy_str = line[52..60].trim();
+            let vz_str = line[60..68].trim();
+            if let (Ok(vx), Ok(vy), Ok(vz)) = (
+                vx_str.parse::<f32>(),
+                vy_str.parse::<f32>(),
+                vz_str.parse::<f32>(),
+            ) {
+                return Some(Vec3::new(vx, vy, vz));
             }
         }
 
-        // Try 1-character element
-        if name.len() >= 1 {
-            let one_char = &name[..1];
-            if let Ok(elem) = Element::from_symbol(one_char) {
-                return elem;
+        if line.len() > 44 {
+            let parts: Vec<&str> = line[44..].split_whitespace().collect();
+            if parts.len() >= 3 {
+                if let (Ok(vx), Ok(vy), Ok(vz)) = (
+                    parts[0].parse::<f32>(),
+                    parts[1].parse::<f32>(),
+                    parts[2].parse::<f32>(),
+                ) {
+                    return Some(Vec3::new(vx, vy, vz));
+                }
             }
         }
 
-        // Common GROMACS atom name patterns
-        if name.starts_with("OW") || name.starts_with("HW") {
-            return Element::O;
-        }
-
-        warn!("Unknown element for atom name: {}, using Unknown", atom_name);
-        Element::Unknown
+        None
     }
 }
 
@@ -368,9 +357,9 @@ mod tests {
     fn test_parse_simple_gro() {
         let gro_content = r#"Water molecule
 3
-    1SOL    OW    1   0.126   0.639   0.322
-    1SOL   HW1    2   0.187   0.713   0.394
-    1SOL   HW2    3   0.145   0.584   0.235
+    1SOL    OW    1   0.126   0.639   0.322   0.0000   0.0000   0.0000
+    1SOL   HW1    2   0.187   0.713   0.394   0.0000   0.0000   0.0000
+    1SOL   HW2    3   0.145   0.584   0.235   0.0000   0.0000   0.0000
    0.0000   0.0000   0.0000"#;
 
         let result = GroParser::parse_string(gro_content, PathBuf::from("test.gro"));
@@ -417,7 +406,7 @@ mod tests {
 
     #[test]
     fn test_parse_atom_line() {
-        let line = "    1SOL    OW    1   0.126   0.639   0.322";
+        let line = "    1SOL    OW    1   0.126   0.639   0.322   0.0000   0.0000   0.0000";
         let result = GroParser::parse_atom_line(line, 3, 0);
 
         assert!(result.is_ok());

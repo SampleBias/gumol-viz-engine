@@ -1,0 +1,26 @@
+# Local hooks — install: pre-commit install
+# https://pre-commit.com/
+
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt -- --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-test-fast
+        name: cargo test (lib + integration)
+        entry: cargo test --lib --tests
+        language: system
+        types: [rust]
+        pass_filenames: false

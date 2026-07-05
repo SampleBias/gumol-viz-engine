@@ -59,13 +59,13 @@ Keep main branch green, prevent regressions, and enable 4–6 developers to work
 **Effort:** 2 days initial  
 **Files:** `tests/`
 
-- [ ] `tests/test_plugin_registration.rs` — GumolVizPlugin builds App
-- [ ] `tests/test_load_pipeline.rs` — LoadFileEvent → SimulationData populated
-- [ ] `tests/test_xyz_load.rs` — end-to-end XYZ
-- [ ] `tests/test_pdb_load.rs` — 1CRN atom count
-- [ ] `tests/test_gro_load.rs` — ✅ exists
-- [ ] `tests/test_mmcif_load.rs` — water.cif
-- [ ] `tests/test_format_detection.rs` — all extensions
+- [x] `tests/test_plugin_registration.rs` — GumolVizPlugin builds App
+- [x] `tests/test_load_pipeline.rs` — LoadFileEvent → SimulationData populated
+- [x] `tests/test_xyz_load.rs` — end-to-end XYZ
+- [x] `tests/test_pdb_load.rs` — mini.pdb atom count + CONECT
+- [x] `tests/test_gro_load.rs` — ✅ exists
+- [x] `tests/test_mmcif_load.rs` — water.cif
+- [x] `tests/test_format_detection.rs` — all extensions
 
 Use small fixture files in `tests/fixtures/` (copy from `examples/`).
 
@@ -90,10 +90,10 @@ jobs:
       - run: cargo build --release
 ```
 
-- [ ] Add CI workflow
-- [ ] Cache cargo registry
-- [ ] Fail on fmt/clippy/test errors
-- [ ] Optional: bench regression on main only
+- [x] Add CI workflow (`.github/workflows/ci.yml`)
+- [x] Cache cargo registry (`Swatinem/rust-cache`)
+- [x] Fail on fmt/clippy/test errors
+- [x] Optional: bench regression on main only (`bench-smoke` job)
 
 ---
 
@@ -101,9 +101,9 @@ jobs:
 **Effort:** 2 hours  
 **Files:** `.pre-commit-config.yaml` or `cargo-husky`
 
-- [ ] `cargo fmt`
-- [ ] `cargo clippy -- -D warnings`
-- [ ] `cargo test` (fast tests only)
+- [x] `cargo fmt` (`.pre-commit-config.yaml`)
+- [x] `cargo clippy -- -D warnings`
+- [x] `cargo test` (fast tests only — lib + integration)
 
 ---
 
@@ -193,9 +193,40 @@ When completing any plan task:
 
 ---
 
+## Profiling Workflow (from plan 10)
+
+Use these commands when investigating performance regressions:
+
+```bash
+# 1. Baseline benchmark
+cargo bench --bench rendering -- --save-baseline main
+
+# 2. After changes, compare against baseline
+cargo bench --bench rendering -- --baseline main
+
+# 3. Chrome trace (optional `trace` feature)
+cargo run --release --features trace
+
+# 4. Bond detection / spatial index
+cargo bench --bench bonds
+
+# 5. Load path / memory estimates
+cargo bench --bench loading
+```
+
+Install local hooks before committing:
+
+```bash
+pip install pre-commit   # or your distro package
+pre-commit install
+pre-commit run --all-files
+```
+
+---
+
 ## Definition of Done
 
-- [ ] CI green on every PR
-- [ ] Integration test per file format
+- [x] CI green on every PR (GitHub Actions workflow added)
+- [x] Integration test per file format
 - [ ] 6-developer assignment doc shared with team
 - [ ] Smoke test checklist passed before v1 tag

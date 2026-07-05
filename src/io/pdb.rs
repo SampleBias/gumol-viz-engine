@@ -78,7 +78,7 @@ impl PDBParser {
                 }
                 "MODEL" => {
                     // Start of new frame
-                    if frame_index > 0 {
+                    if frame_index > 0 && !current_frame.positions.is_empty() {
                         in_first_model = false;
                         frames.push(current_frame);
                     }

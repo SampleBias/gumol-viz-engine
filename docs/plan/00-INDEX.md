@@ -39,7 +39,7 @@ Each document contains:
 | Video / POV-Ray export | ❌ Not started | Low |
 | Advanced viz (surface, cartoon) | ❌ Enum only, no rendering | Low |
 | Performance (LOD, culling, async) | ❌ Not started | Medium |
-| Tests & CI | 🟡 Minimal (1 integration test) | Medium |
+| Tests & CI | 🟡 Integration tests + CI workflow added | Medium |
 
 ---
 

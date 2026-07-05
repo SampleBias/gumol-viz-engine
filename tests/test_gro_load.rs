@@ -73,8 +73,7 @@ fn test_load_actual_gro_file() {
 
 #[test]
 fn test_gro_format_from_content_detection() {
-    // Test that FileFormat can detect GRO from content
-    let gro_content = "    1SOL    OW    1   0.126   0.639   0.322";
+    let gro_content = "Water\n    3\n    1SOL    OW    1   0.126   0.639   0.322   0.0001   0.0002   0.0003";
     let format = FileFormat::from_content(gro_content);
     assert_eq!(format, FileFormat::GRO, "Should detect GRO format from content");
 }

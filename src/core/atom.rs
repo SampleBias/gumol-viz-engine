@@ -633,11 +633,58 @@ impl Element {
             _ => return Err(format!("Unknown element: {}", s)),
         })
     }
+
+    /// Infer element from a PDB/GRO/mmCIF atom name (e.g. `CA` → carbon, not calcium).
+    pub fn from_atom_name(name: &str) -> Element {
+        let name = name.trim().trim_start_matches(|c: char| c.is_ascii_digit());
+
+        match name {
+            "C" | "CA" | "CB" | "CG" | "CG1" | "CG2" | "CD" | "CD1" | "CD2" | "CE" | "CE1"
+            | "CE2" | "CE3" | "CZ" | "CZ2" | "CZ3" | "CH2" => return Element::C,
+            "N" | "ND1" | "ND2" | "NE" | "NE1" | "NE2" | "NH1" | "NH2" | "NZ" => return Element::N,
+            "O" | "OD1" | "OD2" | "OE1" | "OE2" | "OG" | "OG1" | "OH" | "OXT" | "OW" => {
+                return Element::O
+            }
+            "S" | "SD" | "SG" => return Element::S,
+            "P" => return Element::P,
+            "H" | "HD1" | "HD2" | "HE" | "HE1" | "HE2" | "HE3" | "HG" | "HG1" | "HG2" | "HH"
+            | "HH1" | "HH2" | "HZ" | "HZ1" | "HZ2" | "HZ3" | "HW" | "HN" => return Element::H,
+            _ => {}
+        }
+
+        if name.starts_with("OW") {
+            return Element::O;
+        }
+        if name.starts_with("HW") {
+            return Element::H;
+        }
+
+        if name.len() >= 2 {
+            if let Ok(elem) = Element::from_symbol(&name[..2]) {
+                return elem;
+            }
+        }
+        if name.len() >= 1 {
+            if let Ok(elem) = Element::from_symbol(&name[..1]) {
+                return elem;
+            }
+        }
+
+        Element::Unknown
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_from_atom_name_protein_names() {
+        assert_eq!(Element::from_atom_name("CA"), Element::C);
+        assert_eq!(Element::from_atom_name("CB"), Element::C);
+        assert_eq!(Element::from_atom_name("OW"), Element::O);
+        assert_eq!(Element::from_atom_name("HW1"), Element::H);
+    }
 
     #[test]
     fn test_element_from_symbol() {

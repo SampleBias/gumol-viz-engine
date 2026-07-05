@@ -395,28 +395,7 @@ impl MmcifParser {
 
     /// Determine element from atom name (similar to PDB)
     fn element_from_atom_name(atom_name: &str) -> Element {
-        // Remove leading numbers and non-letters
-        let name = atom_name.trim_start_matches(|c: char| c.is_digit(10));
-        let name = name.trim();
-
-        // Try 2-character element first
-        if name.len() >= 2 {
-            let two_char = &name[..2];
-            if let Ok(elem) = Element::from_symbol(two_char) {
-                return elem;
-            }
-        }
-
-        // Try 1-character element
-        if name.len() >= 1 {
-            let one_char = &name[..1];
-            if let Ok(elem) = Element::from_symbol(one_char) {
-                return elem;
-            }
-        }
-
-        warn!("Unknown element for atom name: {}, using Unknown", atom_name);
-        Element::Unknown
+        Element::from_atom_name(atom_name)
     }
 }
 
