@@ -195,6 +195,22 @@ fn dedupe_bonds(bonds: Vec<BondData>) -> Vec<BondData> {
     seen.into_values().collect()
 }
 
+/// Resolve the bond list from file topology or distance detection.
+pub fn resolve_bond_list(
+    sim_data: &crate::systems::loading::SimulationData,
+    positions: &HashMap<u32, Vec3>,
+    config: &BondDetectionConfig,
+) -> Vec<BondData> {
+    let bonds = if !sim_data.bond_data.is_empty() {
+        sim_data.bond_data.clone()
+    } else if config.enabled {
+        detect_bonds_from_distance(sim_data, positions, config)
+    } else {
+        Vec::new()
+    };
+    dedupe_bonds(bonds)
+}
+
 /// Spawn bond cylinders after instanced atoms are ready.
 pub fn spawn_bonds(
     mut commands: Commands,
@@ -217,19 +233,9 @@ pub fn spawn_bonds(
         return;
     }
 
-    if !viz_config.render_mode.shows_bonds() {
-        return;
-    }
-
     let positions = index.collect_positions(&instanced);
 
-    let mut bonds = if !sim_data.bond_data.is_empty() {
-        sim_data.bond_data.clone()
-    } else {
-        detect_bonds_from_distance(&sim_data, &positions, &config)
-    };
-
-    bonds = dedupe_bonds(bonds);
+    let bonds = resolve_bond_list(&sim_data, &positions, &config);
 
     if bonds.is_empty() {
         return;
@@ -244,7 +250,7 @@ pub fn spawn_bonds(
         ..default()
     });
 
-    let bond_radius = 0.1 * viz_config.render_mode.bond_thickness() * viz_config.bond_scale;
+    let base_radius = 0.1;
 
     for bond_data in bonds {
         let Some(pos_a) = positions.get(&bond_data.atom_a_id) else {
@@ -261,7 +267,7 @@ pub fn spawn_bonds(
         }
 
         let bond_midpoint = *pos_a + bond_vector * 0.5;
-        let bond_mesh = meshes.add(rendering::generate_bond_mesh(bond_length, bond_radius.max(0.02)));
+        let bond_mesh = meshes.add(rendering::generate_bond_mesh(bond_length, base_radius));
         let rotation = compute_bond_rotation(bond_vector, bond_length);
 
         let bond_entity = commands

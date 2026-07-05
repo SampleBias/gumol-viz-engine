@@ -5,6 +5,7 @@
 //! Systems only run when VisualizationConfig has changed to avoid per-frame iteration.
 
 use crate::core::bond::Bond;
+use crate::core::secondary_structure::ProteinBackbone;
 use crate::core::visualization::{RenderMode, VisualizationConfig};
 use bevy::prelude::*;
 
@@ -45,7 +46,9 @@ pub fn update_bond_visibility(
         return;
     }
 
-    let should_show = config.show_bonds && config.render_mode.shows_bonds();
+    let should_show = config.show_bonds
+        && config.render_mode.shows_bonds()
+        && !config.render_mode.uses_wireframe_lines();
 
     for mut visibility in bond_query.iter_mut() {
         *visibility = if should_show {
@@ -89,6 +92,80 @@ pub fn update_bond_scale(
     for mut transform in bond_query.iter_mut() {
         transform.scale.x = overall_thickness;
         transform.scale.y = overall_thickness;
+    }
+}
+
+/// Fall back when the selected mode is unavailable for the loaded structure.
+pub fn clamp_unavailable_render_modes(
+    mut config: ResMut<VisualizationConfig>,
+    backbone: Res<ProteinBackbone>,
+) {
+    if config.render_mode == RenderMode::Surface {
+        config.render_mode = RenderMode::CPK;
+    }
+    if config.render_mode.shows_ribbon() && !backbone.cartoon_available {
+        config.render_mode = RenderMode::CPK;
+    }
+}
+
+/// Apply canonical mode parameters when render mode changes.
+pub fn sync_mode_params(
+    mut config: ResMut<VisualizationConfig>,
+    mut last_mode: Local<Option<RenderMode>>,
+    mut mode_events: EventWriter<VisualizationModeChangedEvent>,
+    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+) {
+    let mode_changed = match *last_mode {
+        Some(prev) => prev != config.render_mode,
+        None => true,
+    };
+    let file_loaded = !file_loaded_events.is_empty();
+
+    if !mode_changed && !file_loaded {
+        return;
+    }
+
+    let old_mode = last_mode.unwrap_or(config.render_mode);
+    *last_mode = Some(config.render_mode);
+
+    let params = config.render_mode.mode_params();
+    config.show_atoms = params.show_atoms;
+    config.show_bonds = params.show_bonds || params.use_wireframe_lines;
+
+    if mode_changed && old_mode != config.render_mode {
+        mode_events.send(VisualizationModeChangedEvent {
+            old_mode,
+            new_mode: config.render_mode,
+        });
+        info!(
+            "Visualization mode: {:?} -> {:?}",
+            old_mode,
+            config.render_mode
+        );
+    }
+}
+
+/// Update bond material color for licorice (uniform gray sticks).
+pub fn update_bond_appearance(
+    config: Res<VisualizationConfig>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    bond_query: Query<&Handle<StandardMaterial>, With<Bond>>,
+) {
+    if !config.is_changed() {
+        return;
+    }
+
+    let params = config.render_mode.mode_params();
+    let color = if params.uniform_bond_color {
+        Color::srgb(0.55, 0.55, 0.55)
+    } else {
+        Color::srgb(0.6, 0.6, 0.6)
+    };
+
+    for handle in bond_query.iter() {
+        if let Some(material) = materials.get_mut(handle) {
+            material.base_color = color;
+        }
     }
 }
 
@@ -172,8 +249,8 @@ mod tests {
         assert!(RenderMode::BallAndStick.shows_atoms());
         assert!(RenderMode::BallAndStick.shows_bonds());
 
-        assert!(!RenderMode::Wireframe.shows_atoms());
-        assert!(RenderMode::Wireframe.shows_bonds());
+        assert!(!RenderMode::Wireframe.shows_bonds());
+        assert!(RenderMode::Wireframe.uses_wireframe_lines());
     }
 
     #[test]

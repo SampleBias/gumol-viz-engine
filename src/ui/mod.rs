@@ -4,6 +4,8 @@ pub mod help;
 pub mod inspector;
 pub mod notifications;
 
+use crate::core::secondary_structure::ProteinBackbone;
+use crate::core::secondary_structure::MIN_CARTOON_RESIDUES;
 use crate::core::visualization::{RenderMode, VisualizationConfig};
 use crate::export::gltf_export::RequestExportGltfEvent;
 use crate::export::obj::RequestExportObjEvent;
@@ -18,6 +20,7 @@ use crate::core::trajectory::TimelineState;
 use crate::interaction::measurement::MeasurementState;
 use crate::interaction::selection::SelectionState;
 use bevy::prelude::*;
+use bevy::ecs::system::SystemParam;
 use bevy::window::FileDragAndDrop;
 use crossbeam_channel;
 use std::path::Path;
@@ -51,6 +54,21 @@ pub struct ObjSaveState {
 #[derive(Resource, Default)]
 pub struct GltfSaveState {
     receiver: Option<crossbeam_channel::Receiver<Option<std::path::PathBuf>>>,
+}
+
+#[derive(SystemParam)]
+pub struct ExportSaveStates<'w> {
+    pub screenshot: ResMut<'w, ScreenshotSaveState>,
+    pub obj: ResMut<'w, ObjSaveState>,
+    pub gltf: ResMut<'w, GltfSaveState>,
+}
+
+#[derive(SystemParam)]
+pub struct VisualizationUiState<'w> {
+    pub viz_config: ResMut<'w, VisualizationConfig>,
+    pub bond_config: ResMut<'w, BondDetectionConfig>,
+    pub bond_entities: Res<'w, BondEntities>,
+    pub backbone: Res<'w, ProteinBackbone>,
 }
 
 /// Check if a path has a supported/loadable molecular format
@@ -182,19 +200,15 @@ pub fn main_ui_panel(
     mut contexts: bevy_egui::EguiContexts,
     sim_data: Res<SimulationData>,
     instanced_entities: Res<InstancedAtomEntities>,
-    bond_entities: Res<BondEntities>,
     cli_arg: Res<CliFileArg>,
     mut picker_state: ResMut<FilePickerState>,
-    mut screenshot_state: ResMut<ScreenshotSaveState>,
-    mut obj_save_state: ResMut<ObjSaveState>,
-    mut gltf_save_state: ResMut<GltfSaveState>,
+    mut export_saves: ExportSaveStates,
     mut load_errors: EventReader<FileLoadErrorEvent>,
     mut timeline: ResMut<TimelineState>,
     mut selection: ResMut<SelectionState>,
     measurements: Res<MeasurementState>,
     mut commands: Commands,
-    mut bond_config: ResMut<BondDetectionConfig>,
-    mut viz_config: ResMut<VisualizationConfig>,
+    mut viz_ui: VisualizationUiState,
 ) {
     let ctx = contexts.ctx_mut();
 
@@ -445,68 +459,88 @@ pub fn main_ui_panel(
             // Visualization mode selector
             ui.label("Mode:");
             bevy_egui::egui::ComboBox::from_label("")
-                .selected_text(viz_config.render_mode.name())
+                .selected_text(viz_ui.viz_config.render_mode.name())
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::CPK, RenderMode::CPK.name());
-                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::BallAndStick, RenderMode::BallAndStick.name());
-                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::Licorice, RenderMode::Licorice.name());
-                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::Wireframe, RenderMode::Wireframe.name());
-                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::Surface, RenderMode::Surface.name());
-                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::Cartoon, RenderMode::Cartoon.name());
-                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::Tube, RenderMode::Tube.name());
-                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::Trace, RenderMode::Trace.name());
-                    ui.selectable_value(&mut viz_config.render_mode, RenderMode::Points, RenderMode::Points.name());
+                    ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::CPK, RenderMode::CPK.name());
+                    ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::BallAndStick, RenderMode::BallAndStick.name());
+                    ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::Licorice, RenderMode::Licorice.name());
+                    ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::Wireframe, RenderMode::Wireframe.name());
+                    ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::Points, RenderMode::Points.name());
+
+                    ui.separator();
+
+                    ui.add_enabled_ui(false, |ui| {
+                        ui.label("Surface — coming soon (v1.1)");
+                    });
+
+                    ui.separator();
+                    ui.label("Protein backbone:");
+                    ui.add_enabled_ui(viz_ui.backbone.cartoon_available, |ui| {
+                        ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::Cartoon, RenderMode::Cartoon.name());
+                        ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::Tube, RenderMode::Tube.name());
+                        ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::Trace, RenderMode::Trace.name());
+                    });
+                    if !viz_ui.backbone.cartoon_available {
+                        ui.label(format!(
+                            "Requires ≥{MIN_CARTOON_RESIDUES} CA atoms (found {})",
+                            viz_ui.backbone.ca_count
+                        ));
+                    }
                 });
+
+            if viz_ui.viz_config.render_mode == RenderMode::Surface {
+                viz_ui.viz_config.render_mode = RenderMode::CPK;
+            }
 
             ui.separator();
 
             // Atom size control
             ui.label("Atom Scale:");
-            if ui.add(bevy_egui::egui::Slider::new(&mut viz_config.atom_scale, 0.1..=2.0).logarithmic(true).step_by(0.1)).changed() {
-                viz_config.atom_scale = viz_config.atom_scale.clamp(0.1, 2.0);
+            if ui.add(bevy_egui::egui::Slider::new(&mut viz_ui.viz_config.atom_scale, 0.1..=2.0).logarithmic(true).step_by(0.1)).changed() {
+                viz_ui.viz_config.atom_scale = viz_ui.viz_config.atom_scale.clamp(0.1, 2.0);
             }
-            ui.label(format!("x ({:.2}x)", viz_config.atom_scale));
+            ui.label(format!("x ({:.2}x)", viz_ui.viz_config.atom_scale));
 
             ui.separator();
 
             // Bond size control
             ui.label("Bond Scale:");
-            if ui.add(bevy_egui::egui::Slider::new(&mut viz_config.bond_scale, 0.1..=3.0).logarithmic(true).step_by(0.1)).changed() {
-                viz_config.bond_scale = viz_config.bond_scale.clamp(0.1, 3.0);
+            if ui.add(bevy_egui::egui::Slider::new(&mut viz_ui.viz_config.bond_scale, 0.1..=3.0).logarithmic(true).step_by(0.1)).changed() {
+                viz_ui.viz_config.bond_scale = viz_ui.viz_config.bond_scale.clamp(0.1, 3.0);
             }
-            ui.label(format!("x ({:.2}x)", viz_config.bond_scale));
+            ui.label(format!("x ({:.2}x)", viz_ui.viz_config.bond_scale));
 
             ui.separator();
 
             // Visibility toggles
-            ui.checkbox(&mut viz_config.show_atoms, "Show atoms");
-            ui.checkbox(&mut viz_config.show_bonds, "Show bonds");
+            ui.checkbox(&mut viz_ui.viz_config.show_atoms, "Show atoms");
+            ui.checkbox(&mut viz_ui.viz_config.show_bonds, "Show bonds");
 
             ui.separator();
             ui.heading("Bonds");
             ui.separator();
 
             // Enable/disable bond detection
-            ui.checkbox(&mut bond_config.enabled, "Show bonds");
+            ui.checkbox(&mut viz_ui.bond_config.enabled, "Show bonds");
 
-            if bond_config.enabled {
-                ui.label(format!("Bond count: {}", bond_entities.entities.len()));
+            if viz_ui.bond_config.enabled {
+                ui.label(format!("Bond count: {}", viz_ui.bond_entities.entities.len()));
 
                 // Distance settings
                 ui.label("Detection settings:");
                 ui.horizontal(|ui| {
                     ui.label("Multiplier:");
-                    ui.add(bevy_egui::egui::Slider::new(&mut bond_config.distance_multiplier, 1.0..=2.0).step_by(0.1));
+                    ui.add(bevy_egui::egui::Slider::new(&mut viz_ui.bond_config.distance_multiplier, 1.0..=2.0).step_by(0.1));
                     ui.label(format!("x"));
                 });
 
                 ui.horizontal(|ui| {
                     ui.label("Max distance:");
-                    ui.add(bevy_egui::egui::Slider::new(&mut bond_config.max_bond_distance, 2.0..=5.0).step_by(0.1));
+                    ui.add(bevy_egui::egui::Slider::new(&mut viz_ui.bond_config.max_bond_distance, 2.0..=5.0).step_by(0.1));
                     ui.label(format!("Å"));
                 });
 
-                ui.checkbox(&mut bond_config.same_residue_only, "Same residue only");
+                ui.checkbox(&mut viz_ui.bond_config.same_residue_only, "Same residue only");
             } else {
                 ui.label("Bond detection disabled");
             }
@@ -515,9 +549,9 @@ pub fn main_ui_panel(
             ui.heading("Export");
             ui.separator();
 
-            let screenshot_pending = screenshot_state.receiver.is_some();
-            let obj_pending = obj_save_state.receiver.is_some();
-            let gltf_pending = gltf_save_state.receiver.is_some();
+            let screenshot_pending = export_saves.screenshot.receiver.is_some();
+            let obj_pending = export_saves.obj.receiver.is_some();
+            let gltf_pending = export_saves.gltf.receiver.is_some();
             let any_export_pending = screenshot_pending || obj_pending || gltf_pending;
 
             if ui
@@ -525,7 +559,7 @@ pub fn main_ui_panel(
                 .clicked()
             {
                 let (tx, rx) = crossbeam_channel::unbounded();
-                screenshot_state.receiver = Some(rx);
+                export_saves.screenshot.receiver = Some(rx);
 
                 std::thread::spawn(move || {
                     let result = rfd::FileDialog::new()
@@ -542,7 +576,7 @@ pub fn main_ui_panel(
                 .clicked()
             {
                 let (tx, rx) = crossbeam_channel::unbounded();
-                obj_save_state.receiver = Some(rx);
+                export_saves.obj.receiver = Some(rx);
 
                 std::thread::spawn(move || {
                     let result = rfd::FileDialog::new()
@@ -558,7 +592,7 @@ pub fn main_ui_panel(
                 .clicked()
             {
                 let (tx, rx) = crossbeam_channel::unbounded();
-                gltf_save_state.receiver = Some(rx);
+                export_saves.gltf.receiver = Some(rx);
 
                 std::thread::spawn(move || {
                     let result = rfd::FileDialog::new()
@@ -632,10 +666,9 @@ pub fn register(app: &mut App) {
                 export_obj_save_poll,
                 export_gltf_save_poll,
                 render_mode_shortcuts,
-                main_ui_panel,
-                inspector::inspector_ui,
             ),
-        );
+        )
+        .add_systems(Update, (main_ui_panel, inspector::inspector_ui));
 
     info!("UI module registered");
 }

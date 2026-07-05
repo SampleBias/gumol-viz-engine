@@ -2,6 +2,8 @@
 
 pub mod atom_index;
 pub mod instanced;
+pub mod ribbon;
+pub mod wireframe;
 
 use bevy::{
     prelude::*,
@@ -14,6 +16,8 @@ const RENDER_ASSET_USAGES: bevy::render::render_asset::RenderAssetUsages =
 /// Register all rendering systems
 pub fn register(app: &mut App) {
     instanced::register(app);
+    wireframe::register(app);
+    ribbon::register(app);
     info!("Rendering module registered");
 }
 

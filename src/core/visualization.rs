@@ -85,7 +85,118 @@ impl Default for RenderMode {
     }
 }
 
+/// Per-mode rendering parameters (atom/bond scale and visibility).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ModeParams {
+    /// Atom sphere scale multiplier (applied on top of 50% VDW base mesh).
+    pub atom_scale: f32,
+    /// Bond thickness multiplier (applied to 0.1 Å base cylinder radius).
+    pub bond_scale: f32,
+    /// Whether atom spheres are rendered.
+    pub show_atoms: bool,
+    /// Whether covalent bond cylinders are rendered.
+    pub show_bonds: bool,
+    /// Whether backbone ribbon/trace geometry is rendered.
+    pub show_ribbon: bool,
+    /// Whether wireframe line bonds replace cylinders.
+    pub use_wireframe_lines: bool,
+    /// Use uniform gray bond color instead of element colors.
+    pub uniform_bond_color: bool,
+}
+
 impl RenderMode {
+    /// Canonical mapping from render mode to visualization parameters.
+    pub fn mode_params(&self) -> ModeParams {
+        match self {
+            RenderMode::CPK => ModeParams {
+                atom_scale: 1.0,
+                bond_scale: 0.0,
+                show_atoms: true,
+                show_bonds: false,
+                show_ribbon: false,
+                use_wireframe_lines: false,
+                uniform_bond_color: false,
+            },
+            RenderMode::BallAndStick => ModeParams {
+                atom_scale: 0.3,
+                bond_scale: 1.5,
+                show_atoms: true,
+                show_bonds: true,
+                show_ribbon: false,
+                use_wireframe_lines: false,
+                uniform_bond_color: false,
+            },
+            RenderMode::Licorice => ModeParams {
+                atom_scale: 0.1,
+                bond_scale: 2.0,
+                show_atoms: true,
+                show_bonds: true,
+                show_ribbon: false,
+                use_wireframe_lines: false,
+                uniform_bond_color: true,
+            },
+            RenderMode::Wireframe => ModeParams {
+                atom_scale: 0.0,
+                bond_scale: 0.15,
+                show_atoms: false,
+                show_bonds: false,
+                show_ribbon: false,
+                use_wireframe_lines: true,
+                uniform_bond_color: true,
+            },
+            RenderMode::Surface => ModeParams {
+                atom_scale: 1.0,
+                bond_scale: 0.0,
+                show_atoms: true,
+                show_bonds: false,
+                show_ribbon: false,
+                use_wireframe_lines: false,
+                uniform_bond_color: false,
+            },
+            RenderMode::Cartoon => ModeParams {
+                atom_scale: 0.0,
+                bond_scale: 0.0,
+                show_atoms: false,
+                show_bonds: false,
+                show_ribbon: true,
+                use_wireframe_lines: false,
+                uniform_bond_color: false,
+            },
+            RenderMode::Tube => ModeParams {
+                atom_scale: 0.0,
+                bond_scale: 0.0,
+                show_atoms: false,
+                show_bonds: false,
+                show_ribbon: true,
+                use_wireframe_lines: false,
+                uniform_bond_color: false,
+            },
+            RenderMode::Trace => ModeParams {
+                atom_scale: 0.0,
+                bond_scale: 0.0,
+                show_atoms: false,
+                show_bonds: false,
+                show_ribbon: true,
+                use_wireframe_lines: false,
+                uniform_bond_color: false,
+            },
+            RenderMode::Points => ModeParams {
+                atom_scale: 0.05,
+                bond_scale: 0.0,
+                show_atoms: true,
+                show_bonds: false,
+                show_ribbon: false,
+                use_wireframe_lines: false,
+                uniform_bond_color: false,
+            },
+        }
+    }
+
+    /// Whether this mode is available in the current release.
+    pub fn is_implemented(&self) -> bool {
+        !matches!(self, RenderMode::Surface)
+    }
+
     /// All render modes in cycle order
     pub const ALL: &'static [RenderMode] = &[
         RenderMode::CPK,
@@ -116,52 +227,32 @@ impl RenderMode {
 
     /// Get the atom scale factor for this render mode
     pub fn atom_scale(&self) -> f32 {
-        match self {
-            RenderMode::CPK => 1.0,
-            RenderMode::BallAndStick => 0.5,
-            RenderMode::Licorice => 0.2,
-            RenderMode::Wireframe => 0.0,
-            RenderMode::Surface => 0.0,
-            RenderMode::Cartoon => 0.0,
-            RenderMode::Tube => 0.0,
-            RenderMode::Trace => 0.0,
-            RenderMode::Points => 0.3,
-        }
+        self.mode_params().atom_scale
     }
 
     /// Get the bond thickness multiplier for this render mode
     pub fn bond_thickness(&self) -> f32 {
-        match self {
-            RenderMode::CPK => 0.0,
-            RenderMode::BallAndStick => 1.0,
-            RenderMode::Licorice => 2.0,
-            RenderMode::Wireframe => 0.1,
-            RenderMode::Surface => 0.0,
-            RenderMode::Cartoon => 0.0,
-            RenderMode::Tube => 0.5,
-            RenderMode::Trace => 0.1,
-            RenderMode::Points => 0.0,
-        }
+        self.mode_params().bond_scale
     }
 
     /// Check if this render mode shows bonds
     pub fn shows_bonds(&self) -> bool {
-        matches!(
-            self,
-            RenderMode::BallAndStick
-                | RenderMode::Licorice
-                | RenderMode::Wireframe
-                | RenderMode::Tube
-                | RenderMode::Trace
-        )
+        self.mode_params().show_bonds
     }
 
     /// Check if this render mode shows atoms as spheres
     pub fn shows_atoms(&self) -> bool {
-        matches!(
-            self,
-            RenderMode::CPK | RenderMode::BallAndStick | RenderMode::Licorice | RenderMode::Points
-        )
+        self.mode_params().show_atoms
+    }
+
+    /// Check if this render mode shows a protein backbone ribbon
+    pub fn shows_ribbon(&self) -> bool {
+        self.mode_params().show_ribbon
+    }
+
+    /// Check if this render mode uses wireframe line bonds
+    pub fn uses_wireframe_lines(&self) -> bool {
+        self.mode_params().use_wireframe_lines
     }
 }
 
@@ -377,14 +468,43 @@ mod tests {
     #[test]
     fn test_render_mode_scales() {
         assert_eq!(RenderMode::CPK.atom_scale(), 1.0);
-        assert_eq!(RenderMode::BallAndStick.atom_scale(), 0.5);
-        assert_eq!(RenderMode::Licorice.atom_scale(), 0.2);
+        assert_eq!(RenderMode::BallAndStick.atom_scale(), 0.3);
+        assert_eq!(RenderMode::Licorice.atom_scale(), 0.1);
+        assert_eq!(RenderMode::Points.atom_scale(), 0.05);
+    }
+
+    #[test]
+    fn test_mode_params_mapping_table() {
+        let cpk = RenderMode::CPK.mode_params();
+        assert_eq!(cpk.atom_scale, 1.0);
+        assert!(cpk.show_atoms);
+        assert!(!cpk.show_bonds);
+
+        let bas = RenderMode::BallAndStick.mode_params();
+        assert_eq!(bas.atom_scale, 0.3);
+        assert_eq!(bas.bond_scale, 1.5);
+        assert!(bas.show_atoms);
+        assert!(bas.show_bonds);
+
+        let lic = RenderMode::Licorice.mode_params();
+        assert_eq!(lic.atom_scale, 0.1);
+        assert_eq!(lic.bond_scale, 2.0);
+        assert!(lic.uniform_bond_color);
+
+        let wire = RenderMode::Wireframe.mode_params();
+        assert!(!wire.show_atoms);
+        assert!(wire.use_wireframe_lines);
+
+        let cartoon = RenderMode::Cartoon.mode_params();
+        assert!(cartoon.show_ribbon);
+        assert!(!cartoon.show_atoms);
     }
 
     #[test]
     fn test_render_mode_bonds() {
         assert!(RenderMode::BallAndStick.shows_bonds());
         assert!(!RenderMode::CPK.shows_bonds());
+        assert!(!RenderMode::Wireframe.shows_bonds());
     }
 
     #[test]

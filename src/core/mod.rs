@@ -7,6 +7,7 @@
 pub mod atom;
 pub mod bond;
 pub mod molecule;
+pub mod secondary_structure;
 pub mod trajectory;
 pub mod visualization;
 
