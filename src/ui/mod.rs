@@ -1,10 +1,8 @@
-
 //! User interface systems (EGUI)
-//!
-//! Provides file intake via:
-//! - CLI argument (handled in loading module)
-//! - Drag-and-drop onto window
-//! - Open button with native file dialog
+
+pub mod help;
+pub mod inspector;
+pub mod notifications;
 
 use crate::core::visualization::{RenderMode, VisualizationConfig};
 use crate::export::gltf_export::RequestExportGltfEvent;
@@ -14,7 +12,7 @@ use crate::io::FileFormat;
 use crate::systems::loading::{
     CliFileArg, FileLoadErrorEvent, LoadFileEvent, SimulationData,
 };
-use crate::systems::spawning::AtomEntities;
+use crate::rendering::instanced::InstancedAtomEntities;
 use crate::systems::bonds::{BondEntities, BondDetectionConfig};
 use crate::core::trajectory::TimelineState;
 use crate::interaction::measurement::MeasurementState;
@@ -183,7 +181,7 @@ pub fn export_gltf_save_poll(
 pub fn main_ui_panel(
     mut contexts: bevy_egui::EguiContexts,
     sim_data: Res<SimulationData>,
-    atom_entities: Res<AtomEntities>,
+    instanced_entities: Res<InstancedAtomEntities>,
     bond_entities: Res<BondEntities>,
     cli_arg: Res<CliFileArg>,
     mut picker_state: ResMut<FilePickerState>,
@@ -248,7 +246,7 @@ pub fn main_ui_panel(
                 ui.label(format!("  Atoms: {}", sim_data.num_atoms()));
                 ui.label(format!("  Frames: {}", sim_data.num_frames()));
                 ui.label(format!("  Time: {:.2} fs", sim_data.total_time()));
-                ui.label(format!("  Entities: {}", atom_entities.entities.len()));
+                ui.label(format!("  Draw calls: ~{}", instanced_entities.entities.len()));
             } else {
                 ui.label(
                     bevy_egui::egui::RichText::new("✗ No file loaded")
@@ -279,22 +277,52 @@ pub fn main_ui_panel(
 
             let total_frames = sim_data.num_frames();
             if total_frames > 1 {
+                let time_ps = timeline.simulation_time(sim_data.trajectory.time_step) / 1000.0;
                 ui.label(format!("Frame: {} / {}", timeline.current_frame + 1, total_frames));
-                ui.label(format!("Time: {:.2} ps", timeline.simulation_time(sim_data.trajectory.time_step) / 1000.0));
+                ui.label(format!("Time: {:.3} ps", time_ps));
+                if timeline.interpolate && timeline.is_playing {
+                    ui.label(
+                        bevy_egui::egui::RichText::new(format!(
+                            "  (α = {:.0}%)",
+                            timeline.frame_alpha() * 100.0
+                        ))
+                        .small()
+                        .italics(),
+                    );
+                }
 
-                // Progress bar
-                let _progress = timeline.progress();
-                let mut frame_value = timeline.current_frame as f32;
+                // Frame scrubber (includes sub-frame progress when interpolating)
+                let mut progress = timeline.progress();
                 if ui.add(
-                    bevy_egui::egui::Slider::new(&mut frame_value, 0.0..=(total_frames - 1) as f32)
-                        .integer()
-                        .step_by(1.0)
+                    bevy_egui::egui::Slider::new(&mut progress, 0.0..=1.0)
                         .show_value(false)
-                ).changed() {
-                    // Slider dragged - update frame
-                    timeline.goto_frame(frame_value as usize);
+                        .text("Scrub"),
+                )
+                .changed()
+                {
+                    let max = (total_frames - 1) as f32;
+                    let frame_f = progress * max;
+                    timeline.goto_frame(frame_f.floor() as usize);
+                    timeline.interpolation_factor = frame_f.fract();
                     timeline.pause();
                 }
+
+                // Jump to frame number
+                ui.horizontal(|ui| {
+                    ui.label("Go to frame:");
+                    let mut frame_input = (timeline.current_frame + 1) as u32;
+                    if ui
+                        .add(
+                            bevy_egui::egui::DragValue::new(&mut frame_input)
+                                .range(1..=total_frames as u32)
+                                .speed(1),
+                        )
+                        .changed()
+                    {
+                        timeline.goto_frame((frame_input as usize).saturating_sub(1));
+                        timeline.pause();
+                    }
+                });
 
                 // Playback controls
                 ui.horizontal(|ui| {
@@ -324,14 +352,37 @@ pub fn main_ui_panel(
                 // Playback speed
                 ui.horizontal(|ui| {
                     ui.label("Speed:");
-                    ui.add(bevy_egui::egui::Slider::new(&mut timeline.playback_speed, 0.1..=5.0).logarithmic(true).step_by(0.1));
-                    ui.label(format!("x"));
+                    ui.add(
+                        bevy_egui::egui::Slider::new(&mut timeline.playback_speed, 0.1..=5.0)
+                            .logarithmic(true)
+                            .step_by(0.1),
+                    );
+                    ui.label(format!("{:.2}x", timeline.playback_speed));
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Presets:");
+                    if ui.button("0.25x").clicked() {
+                        timeline.playback_speed = 0.25;
+                    }
+                    if ui.button("0.5x").clicked() {
+                        timeline.playback_speed = 0.5;
+                    }
+                    if ui.button("1x").clicked() {
+                        timeline.playback_speed = 1.0;
+                    }
+                    if ui.button("2x").clicked() {
+                        timeline.playback_speed = 2.0;
+                    }
+                    if ui.button("4x").clicked() {
+                        timeline.playback_speed = 4.0;
+                    }
                 });
 
                 // Options
                 ui.horizontal(|ui| {
-                    if ui.checkbox(&mut timeline.loop_playback, "Loop").changed() {}
-                    if ui.checkbox(&mut timeline.interpolate, "Interpolate").changed() {}
+                    ui.checkbox(&mut timeline.loop_playback, "Loop");
+                    ui.checkbox(&mut timeline.interpolate, "Smooth playback");
                 });
             } else if total_frames == 1 {
                 ui.label("Single frame trajectory");
@@ -545,8 +596,29 @@ pub fn main_ui_panel(
         });
 }
 
+/// Keyboard shortcuts for render modes (1–5)
+pub fn render_mode_shortcuts(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut viz_config: ResMut<VisualizationConfig>,
+) {
+    if keyboard.just_pressed(KeyCode::Digit1) {
+        viz_config.render_mode = RenderMode::CPK;
+    } else if keyboard.just_pressed(KeyCode::Digit2) {
+        viz_config.render_mode = RenderMode::BallAndStick;
+    } else if keyboard.just_pressed(KeyCode::Digit3) {
+        viz_config.render_mode = RenderMode::Licorice;
+    } else if keyboard.just_pressed(KeyCode::Digit4) {
+        viz_config.render_mode = RenderMode::Wireframe;
+    } else if keyboard.just_pressed(KeyCode::Digit5) {
+        viz_config.render_mode = RenderMode::Points;
+    }
+}
+
 /// Register all UI systems
 pub fn register(app: &mut App) {
+    help::register(app);
+    notifications::register(app);
+
     app.init_resource::<FilePickerState>()
         .init_resource::<ScreenshotSaveState>()
         .init_resource::<ObjSaveState>()
@@ -559,9 +631,11 @@ pub fn register(app: &mut App) {
                 screenshot_save_poll,
                 export_obj_save_poll,
                 export_gltf_save_poll,
+                render_mode_shortcuts,
                 main_ui_panel,
+                inspector::inspector_ui,
             ),
         );
 
-    info!("UI module registered (file intake: CLI, drag-drop, Open button, visualization modes)");
+    info!("UI module registered");
 }

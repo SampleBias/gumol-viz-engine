@@ -89,18 +89,28 @@ impl TimelineState {
         self.goto_frame(0);
     }
 
-    /// Get progress as a percentage (0.0 to 1.0)
-    pub fn progress(&self) -> f32 {
-        if self.total_frames == 0 {
-            0.0
+    /// Fractional position between current and next frame (0.0–1.0)
+    pub fn frame_alpha(&self) -> f32 {
+        if self.interpolate {
+            self.interpolation_factor
         } else {
-            self.current_frame as f32 / (self.total_frames - 1) as f32
+            0.0
         }
     }
 
-    /// Get the current simulation time (in femtoseconds)
+    /// Get progress as a percentage (0.0 to 1.0), including sub-frame alpha
+    pub fn progress(&self) -> f32 {
+        if self.total_frames <= 1 {
+            0.0
+        } else {
+            let max = (self.total_frames - 1) as f32;
+            (self.current_frame as f32 + self.frame_alpha()) / max
+        }
+    }
+
+    /// Simulation time at current frame (fs)
     pub fn simulation_time(&self, time_step: f32) -> f32 {
-        self.current_frame as f32 * time_step
+        (self.current_frame as f32 + self.frame_alpha()) * time_step
     }
 }
 
@@ -334,6 +344,17 @@ mod tests {
             interpolated.get_position(0),
             Some(Vec3::new(0.5, 0.0, 0.0))
         );
+    }
+
+    #[test]
+    fn test_frame_alpha_and_progress() {
+        let mut timeline = TimelineState::new(101);
+        timeline.current_frame = 50;
+        timeline.interpolate = true;
+        timeline.interpolation_factor = 0.5;
+
+        assert!((timeline.frame_alpha() - 0.5).abs() < f32::EPSILON);
+        assert!((timeline.progress() - 0.5).abs() < 0.01);
     }
 
     #[test]
