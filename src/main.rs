@@ -99,7 +99,7 @@ fn spawn_water_molecule(
     // Oxygen atom (red, larger)
     let oxygen_mesh = meshes.add(rendering::generate_atom_mesh(Element::O.vdw_radius()));
     let oxygen_material = materials.add(StandardMaterial {
-        base_color: Color::rgb(0.8, 0.1, 0.1),
+        base_color: Color::srgb(0.8, 0.1, 0.1),
         metallic: 0.1,
         perceptual_roughness: 0.2,
         ..default()
@@ -115,7 +115,7 @@ fn spawn_water_molecule(
     // Hydrogen atoms (white, smaller)
     let hydrogen_mesh = meshes.add(rendering::generate_atom_mesh(Element::H.vdw_radius()));
     let hydrogen_material = materials.add(StandardMaterial {
-        base_color: Color::rgb(0.9, 0.9, 0.9),
+        base_color: Color::srgb(0.9, 0.9, 0.9),
         metallic: 0.0,
         perceptual_roughness: 0.1,
         ..default()
@@ -140,7 +140,7 @@ fn spawn_water_molecule(
     // Add O-H bonds as cylinders
     let bond_mesh = meshes.add(rendering::generate_bond_mesh(0.96, 0.1));
     let bond_material = materials.add(StandardMaterial {
-        base_color: Color::rgb(0.7, 0.7, 0.7),
+        base_color: Color::srgb(0.7, 0.7, 0.7),
         metallic: 0.2,
         perceptual_roughness: 0.3,
         ..default()

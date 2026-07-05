@@ -132,6 +132,7 @@ pub fn despawn_all_atoms(
 }
 
 /// System to spawn atoms when simulation data is loaded
+#[deprecated(note = "Use instanced rendering path in rendering::instanced")]
 pub fn spawn_atoms_on_load(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,

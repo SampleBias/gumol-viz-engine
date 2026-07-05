@@ -7,6 +7,9 @@
 
 use crate::core::atom::{AtomData, Element};
 use crate::core::trajectory::{FrameData, TimelineState};
+use crate::core::visualization::VisualizationConfig;
+use crate::interaction::selection::SelectionState;
+use crate::rendering::atom_index::InstancedAtomIndex;
 use crate::rendering::generate_atom_mesh;
 use bevy::core_pipeline::core_3d::Transparent3d;
 use bevy::ecs::{query::QueryItem, system::SystemParamItem};
@@ -91,16 +94,22 @@ pub struct InstancedAtomsSpawnedEvent {
 // ============================================================================
 
 /// Spawn one entity per element with instance data for all atoms of that element.
+/// Returns entity map and atom IDs grouped by element (for index building).
 pub fn spawn_atoms_instanced_internal(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     frame_data: &FrameData,
     atom_data: &[AtomData],
-) -> HashMap<Element, Entity> {
+    viz_config: &VisualizationConfig,
+) -> (HashMap<Element, Entity>, HashMap<Element, Vec<u32>>) {
     info!(
         "Spawning {} atoms with instanced rendering",
         atom_data.len()
     );
+
+    let mode_scale = viz_config.render_mode.atom_scale() * viz_config.atom_scale;
+    let show_atoms = viz_config.show_atoms && viz_config.render_mode.shows_atoms();
+    let instance_scale = if show_atoms { mode_scale.max(0.001) } else { 0.0 };
 
     let mut atoms_by_element: HashMap<Element, Vec<&AtomData>> = HashMap::new();
     for atom_info in atom_data {
@@ -115,23 +124,28 @@ pub fn spawn_atoms_instanced_internal(
     info!("Grouped into {} element types", atoms_by_element.len());
 
     let mut entity_map = HashMap::new();
+    let mut ids_by_element: HashMap<Element, Vec<u32>> = HashMap::new();
 
     for (element, atoms) in &atoms_by_element {
         let radius = element.vdw_radius() * 0.5;
         let mesh = meshes.add(generate_atom_mesh(radius));
         let color_rgb = element.cpk_color();
 
+        let mut element_ids = Vec::with_capacity(atoms.len());
         let instances: Vec<AtomInstanceData> = atoms
             .iter()
             .map(|a| {
+                element_ids.push(a.id);
                 let position = frame_data.get_position(a.id).unwrap_or(Vec3::ZERO);
                 AtomInstanceData {
                     position,
-                    scale: 1.0,
+                    scale: instance_scale,
                     color: Vec4::new(color_rgb[0], color_rgb[1], color_rgb[2], 1.0),
                 }
             })
             .collect();
+
+        ids_by_element.insert(*element, element_ids);
 
         let entity = commands
             .spawn((
@@ -153,16 +167,20 @@ pub fn spawn_atoms_instanced_internal(
         (1.0 - entity_map.len() as f64 / atom_data.len().max(1) as f64) * 100.0
     );
 
-    entity_map
+    (entity_map, ids_by_element)
 }
 
 /// System: spawn instanced atoms when a file finishes loading.
 pub fn spawn_instanced_atoms_on_load(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     sim_data: Res<crate::systems::loading::SimulationData>,
+    viz_config: Res<VisualizationConfig>,
     mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
     mut instanced_entities: ResMut<InstancedAtomEntities>,
+    mut atom_index: ResMut<InstancedAtomIndex>,
+    mut pick_entities: ResMut<crate::interaction::pick_proxy::PickProxyEntities>,
     mut spawned_event: EventWriter<InstancedAtomsSpawnedEvent>,
 ) {
     if !instanced_entities.entities.is_empty() {
@@ -173,16 +191,32 @@ pub fn spawn_instanced_atoms_on_load(
 
     if should_spawn && sim_data.loaded && !sim_data.atom_data.is_empty() {
         if let Some(first_frame) = sim_data.trajectory.get_frame(0) {
-            let new_entities = spawn_atoms_instanced_internal(
+            let (new_entities, ids_by_element) = spawn_atoms_instanced_internal(
                 &mut commands,
                 &mut meshes,
                 first_frame,
                 &sim_data.atom_data,
+                &viz_config,
             );
 
             let draw_calls = new_entities.len();
             instanced_entities.entities = new_entities;
             instanced_entities.total_atoms = sim_data.atom_data.len();
+            *atom_index = InstancedAtomIndex::build(&ids_by_element);
+
+            let positions: HashMap<u32, Vec3> = first_frame
+                .positions
+                .iter()
+                .map(|(&id, &pos)| (id, pos))
+                .collect();
+
+            pick_entities.entities = crate::interaction::pick_proxy::spawn_pick_proxies(
+                &mut commands,
+                &mut meshes,
+                &mut materials,
+                &sim_data.atom_data,
+                &positions,
+            );
 
             spawned_event.send(InstancedAtomsSpawnedEvent {
                 count: sim_data.atom_data.len(),
@@ -192,18 +226,29 @@ pub fn spawn_instanced_atoms_on_load(
     }
 }
 
-/// System: clear instanced atoms when a new file is loaded.
+/// Clear instanced atoms when a new file is loaded.
 pub fn clear_instanced_atoms_on_load(
     mut commands: Commands,
     mut instanced_entities: ResMut<InstancedAtomEntities>,
+    mut atom_index: ResMut<InstancedAtomIndex>,
+    mut pick_entities: ResMut<crate::interaction::pick_proxy::PickProxyEntities>,
     file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
 ) {
-    if !file_loaded_events.is_empty() && !instanced_entities.entities.is_empty() {
-        for (_, entity) in instanced_entities.entities.drain() {
-            commands.entity(entity).despawn_recursive();
+    if !file_loaded_events.is_empty() {
+        if !pick_entities.entities.is_empty() {
+            for (_, entity) in pick_entities.entities.drain() {
+                commands.entity(entity).despawn_recursive();
+            }
         }
-        instanced_entities.total_atoms = 0;
-        info!("Cleared instanced atoms for new file load");
+
+        if !instanced_entities.entities.is_empty() {
+            for (_, entity) in instanced_entities.entities.drain() {
+                commands.entity(entity).despawn_recursive();
+            }
+            instanced_entities.total_atoms = 0;
+            atom_index.clear();
+            info!("Cleared instanced atoms for new file load");
+        }
     }
 }
 
@@ -239,6 +284,7 @@ pub fn center_camera_on_file_load_instanced(
 pub fn update_instanced_positions_from_timeline(
     sim_data: Res<crate::systems::loading::SimulationData>,
     timeline: Res<TimelineState>,
+    index: Res<InstancedAtomIndex>,
     mut instanced_query: Query<(&InstancedAtomEntity, &mut InstancedAtomMesh)>,
 ) {
     if !timeline.is_changed() || !sim_data.loaded || sim_data.num_frames() == 0 {
@@ -260,24 +306,22 @@ pub fn update_instanced_positions_from_timeline(
     for (entity_info, mut mesh) in instanced_query.iter_mut() {
         let element = entity_info.element;
 
-        let element_atoms: Vec<&AtomData> = sim_data
-            .atom_data
-            .iter()
-            .filter(|a| a.element == element)
-            .collect();
+        let Some(atom_ids) = index.element_atom_ids.get(&element) else {
+            continue;
+        };
 
-        for (i, atom_info) in element_atoms.iter().enumerate() {
+        for (i, &atom_id) in atom_ids.iter().enumerate() {
             if i >= mesh.instances.len() {
                 break;
             }
 
-            let current_pos = match current_frame.get_position(atom_info.id) {
+            let current_pos = match current_frame.get_position(atom_id) {
                 Some(p) => p,
                 None => continue,
             };
 
             let position = if let Some(nf) = next_frame {
-                if let Some(next_pos) = nf.get_position(atom_info.id) {
+                if let Some(next_pos) = nf.get_position(atom_id) {
                     current_pos.lerp(next_pos, timeline.interpolation_factor)
                 } else {
                     current_pos
@@ -287,6 +331,65 @@ pub fn update_instanced_positions_from_timeline(
             };
 
             mesh.instances[i].position = position;
+        }
+    }
+}
+
+/// Update instance scales when visualization mode changes.
+pub fn update_instanced_visualization(
+    viz_config: Res<VisualizationConfig>,
+    mut instanced_query: Query<&mut InstancedAtomMesh>,
+) {
+    if !viz_config.is_changed() {
+        return;
+    }
+
+    let mode_scale = viz_config.render_mode.atom_scale() * viz_config.atom_scale;
+    let show_atoms = viz_config.show_atoms && viz_config.render_mode.shows_atoms();
+    let instance_scale = if show_atoms { mode_scale.max(0.001) } else { 0.0 };
+
+    for mut mesh in instanced_query.iter_mut() {
+        for instance in mesh.instances.iter_mut() {
+            instance.scale = instance_scale;
+        }
+    }
+}
+
+/// Highlight selected atoms by tinting instance colors yellow.
+pub fn update_instanced_selection_highlight(
+    selection: Res<SelectionState>,
+    sim_data: Res<crate::systems::loading::SimulationData>,
+    index: Res<InstancedAtomIndex>,
+    mut instanced_query: Query<(&InstancedAtomEntity, &mut InstancedAtomMesh)>,
+) {
+    if !selection.is_changed() {
+        return;
+    }
+
+    let selected: std::collections::HashSet<u32> = selection.selected_atom_ids.iter().copied().collect();
+
+    for (entity_info, mut mesh) in instanced_query.iter_mut() {
+        let Some(atom_ids) = index.element_atom_ids.get(&entity_info.element) else {
+            continue;
+        };
+
+        for (i, &atom_id) in atom_ids.iter().enumerate() {
+            if i >= mesh.instances.len() {
+                break;
+            }
+
+            let cpk = sim_data
+                .atom_data
+                .iter()
+                .find(|a| a.id == atom_id)
+                .map(|a| a.element.cpk_color())
+                .unwrap_or(entity_info.element.cpk_color());
+
+            if selected.contains(&atom_id) {
+                mesh.instances[i].color = Vec4::new(1.0, 1.0, 0.0, 1.0);
+            } else {
+                mesh.instances[i].color = Vec4::new(cpk[0], cpk[1], cpk[2], 1.0);
+            }
         }
     }
 }
@@ -533,6 +636,7 @@ impl<P: PhaseItem> RenderCommand<P> for DrawMeshInstanced {
 /// App-world update systems are registered centrally in `systems::register`.
 pub fn register(app: &mut App) {
     app.init_resource::<InstancedAtomEntities>()
+        .init_resource::<InstancedAtomIndex>()
         .add_event::<InstancedAtomsSpawnedEvent>()
         .add_plugins(InstancedAtomRenderPlugin);
 

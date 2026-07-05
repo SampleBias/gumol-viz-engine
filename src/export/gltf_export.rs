@@ -4,8 +4,13 @@
 //! Uses embedded buffer (base64) for a single-file output.
 
 use crate::core::bond::Bond;
+use crate::core::visualization::VisualizationConfig;
 use crate::export::mesh_export::{generate_cylinder_mesh, generate_sphere_mesh, transform_vertex};
-use crate::systems::spawning::SpawnedAtom;
+use crate::export::scene_snapshot::{capture_scene, SceneSnapshot};
+use crate::rendering::atom_index::InstancedAtomIndex;
+use crate::rendering::instanced::{InstancedAtomEntity, InstancedAtomMesh};
+use crate::systems::bonds::BondEntities;
+use crate::systems::loading::SimulationData;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use bevy::prelude::*;
 use gltf_json::buffer::View as BufferView;
@@ -23,47 +28,29 @@ pub struct RequestExportGltfEvent {
     pub path: PathBuf,
 }
 
-/// Data collected for export
-struct ExportData {
-    atoms: Vec<(Vec3, f32)>,
-    bonds: Vec<(Vec3, Quat, f32, f32)>,
-}
-
 /// Handle glTF export requests
 pub fn handle_export_gltf(
     mut requests: EventReader<RequestExportGltfEvent>,
-    atom_query: Query<(&Transform, &crate::core::atom::Atom), With<SpawnedAtom>>,
+    sim_data: Res<SimulationData>,
+    viz_config: Res<VisualizationConfig>,
+    index: Res<InstancedAtomIndex>,
+    instanced: Query<(&InstancedAtomEntity, &InstancedAtomMesh)>,
     bond_query: Query<(&Transform, &Bond)>,
-    atom_entities: Res<crate::systems::spawning::AtomEntities>,
-    bond_entities: Res<crate::systems::bonds::BondEntities>,
+    bond_entities: Res<BondEntities>,
 ) {
     for event in requests.read() {
-        let mut data = ExportData {
-            atoms: Vec::new(),
-            bonds: Vec::new(),
-        };
-
-        for (_, entity) in atom_entities.entities.iter() {
-            if let Ok((transform, atom)) = atom_query.get(*entity) {
-                let radius = atom.element.vdw_radius() * 0.5;
-                data.atoms.push((transform.translation, radius));
-            }
-        }
-
-        for (_, entity) in bond_entities.entities.iter() {
-            if let Ok((transform, bond)) = bond_query.get(*entity) {
-                data.bonds.push((
-                    transform.translation,
-                    transform.rotation,
-                    bond.length,
-                    0.1,
-                ));
-            }
-        }
+        let snapshot = capture_scene(
+            &index,
+            &instanced,
+            &sim_data.atom_data,
+            &bond_query,
+            &bond_entities,
+            &viz_config,
+        );
 
         let path = event.path.clone();
         std::thread::spawn(move || {
-            if let Err(e) = write_gltf(&path, &data) {
+            if let Err(e) = write_gltf(&path, &snapshot) {
                 error!("glTF export failed: {}", e);
             } else {
                 info!("Exported glTF to {:?}", path);
@@ -72,15 +59,15 @@ pub fn handle_export_gltf(
     }
 }
 
-fn write_gltf(path: &PathBuf, data: &ExportData) -> std::io::Result<()> {
+fn write_gltf(path: &PathBuf, data: &SceneSnapshot) -> std::io::Result<()> {
     let mut positions: Vec<f32> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
 
     let (sphere_verts, sphere_indices) = generate_sphere_mesh(1.0);
-    for (pos, radius) in &data.atoms {
+    for atom in &data.atoms {
         for v in &sphere_verts {
-            let scaled = [v[0] * radius, v[1] * radius, v[2] * radius];
-            let world = transform_vertex(scaled, *pos, Quat::IDENTITY);
+            let scaled = [v[0] * atom.radius, v[1] * atom.radius, v[2] * atom.radius];
+            let world = transform_vertex(scaled, atom.position, Quat::IDENTITY);
             positions.extend_from_slice(&world);
         }
         let offset = (positions.len() / 3) as u32;
@@ -89,11 +76,11 @@ fn write_gltf(path: &PathBuf, data: &ExportData) -> std::io::Result<()> {
         }
     }
 
-    for (translation, rotation, length, radius) in &data.bonds {
-        let (cyl_verts, cyl_indices) = generate_cylinder_mesh(*length, *radius);
+    for bond in &data.bonds {
+        let (cyl_verts, cyl_indices) = generate_cylinder_mesh(bond.length, bond.radius);
         let offset = (positions.len() / 3) as u32;
         for v in &cyl_verts {
-            let world = transform_vertex(*v, *translation, *rotation);
+            let world = transform_vertex(*v, bond.translation, bond.rotation);
             positions.extend_from_slice(&world);
         }
         for i in &cyl_indices {

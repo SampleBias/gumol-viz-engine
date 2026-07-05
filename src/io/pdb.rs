@@ -18,31 +18,37 @@ pub struct PDBParser;
 impl PDBParser {
     /// Parse a PDB file and return trajectory data
     pub fn parse_file(path: &Path) -> IOResult<Trajectory> {
+        Ok(Self::parse_file_with_atoms(path)?.0)
+    }
+
+    /// Parse a PDB file returning trajectory, atom metadata, and CONECT bonds
+    pub fn parse_file_with_atoms(path: &Path) -> IOResult<(Trajectory, Vec<AtomData>, Vec<BondData>)> {
         let file = File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
         let reader = BufReader::new(file);
         Self::parse_reader(reader, path.to_path_buf())
     }
 
     /// Parse PDB format from a reader
-    pub fn parse_reader<R: Read>(reader: R, file_path: PathBuf) -> IOResult<Trajectory> {
+    pub fn parse_reader<R: Read>(reader: R, file_path: PathBuf) -> IOResult<(Trajectory, Vec<AtomData>, Vec<BondData>)> {
         let reader = BufReader::new(reader);
         let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
         Self::parse_lines(&lines, file_path)
     }
 
     /// Parse PDB format from string content
-    pub fn parse_string(content: &str, file_path: PathBuf) -> IOResult<Trajectory> {
+    pub fn parse_string(content: &str, file_path: PathBuf) -> IOResult<(Trajectory, Vec<AtomData>, Vec<BondData>)> {
         let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
         Self::parse_lines(&lines, file_path)
     }
 
-    /// Parse PDB format from a vector of lines
-    fn parse_lines(lines: &[String], file_path: PathBuf) -> IOResult<Trajectory> {
+    fn parse_lines(lines: &[String], file_path: PathBuf) -> IOResult<(Trajectory, Vec<AtomData>, Vec<BondData>)> {
         let mut atom_data = Vec::new();
         let mut bond_data = Vec::new();
         let mut frames = Vec::new();
         let mut current_frame = FrameData::new(0, 0.0);
         let mut frame_index = 0;
+        // Atom metadata is only collected from the first model to avoid duplicates.
+        let mut in_first_model = true;
 
         let mut metadata = TrajectoryMetadata::default();
 
@@ -59,7 +65,10 @@ impl PDBParser {
                 "CRYST1" => Self::parse_cryst1(line, &mut current_frame),
                 "ATOM" | "HETATM" => {
                     if let Some(atom) = Self::parse_atom(line, line_num)? {
-                        atom_data.push(atom);
+                        current_frame.set_position(atom.id, atom.position);
+                        if in_first_model {
+                            atom_data.push(atom);
+                        }
                     }
                 }
                 "CONECT" => {
@@ -70,6 +79,7 @@ impl PDBParser {
                 "MODEL" => {
                     // Start of new frame
                     if frame_index > 0 {
+                        in_first_model = false;
                         frames.push(current_frame);
                     }
                     current_frame = FrameData::new(frame_index, frame_index as f32);
@@ -78,6 +88,7 @@ impl PDBParser {
                 "ENDMDL" => {
                     // End of frame
                     frames.push(current_frame.clone());
+                    in_first_model = false;
                     current_frame = FrameData::new(frame_index, frame_index as f32);
                 }
                 "END" | "TER" => {
@@ -97,8 +108,8 @@ impl PDBParser {
         // If no frames were found, create one from the ATOM records
         if frames.is_empty() && !atom_data.is_empty() {
             let mut frame = FrameData::new(0, 0.0);
-            for (i, atom) in atom_data.iter().enumerate() {
-                frame.set_position(i as u32, atom.position);
+            for atom in atom_data.iter() {
+                frame.set_position(atom.id, atom.position);
             }
             frames.push(frame);
         }
@@ -111,7 +122,7 @@ impl PDBParser {
             trajectory.add_frame(frame);
         }
 
-        Ok(trajectory)
+        Ok((trajectory, atom_data, bond_data))
     }
 
     /// Parse HEADER record
@@ -354,9 +365,21 @@ END
         );
 
         assert!(result.is_ok());
-        let trajectory = result.unwrap();
+        let (trajectory, atom_data, _bonds) = result.unwrap();
         assert_eq!(trajectory.num_frames(), 1);
         assert_eq!(trajectory.num_atoms, 4);
+        assert_eq!(atom_data.len(), 4);
+
+        // Elements must be parsed correctly (not defaulted to carbon).
+        assert_eq!(atom_data[0].element, Element::N);
+        assert_eq!(atom_data[3].element, Element::O);
+        assert_eq!(atom_data[0].residue_name, "ALA");
+
+        // Frame positions are keyed by serial number and match atom data.
+        let frame = trajectory.get_frame(0).unwrap();
+        for atom in &atom_data {
+            assert_eq!(frame.get_position(atom.id), Some(atom.position));
+        }
     }
 
     #[test]
@@ -378,7 +401,19 @@ END
         );
 
         assert!(result.is_ok());
-        let trajectory = result.unwrap();
+        let (trajectory, atom_data, _bonds) = result.unwrap();
         assert_eq!(trajectory.num_frames(), 2);
+        // Atom metadata comes from the first model only (no duplicates).
+        assert_eq!(atom_data.len(), 2);
+
+        // Both frames carry positions keyed by serial number.
+        assert_eq!(
+            trajectory.get_frame(0).unwrap().get_position(1),
+            Some(Vec3::new(0.0, 0.0, 0.0))
+        );
+        assert_eq!(
+            trajectory.get_frame(1).unwrap().get_position(1),
+            Some(Vec3::new(0.1, 0.0, 0.0))
+        );
     }
 }

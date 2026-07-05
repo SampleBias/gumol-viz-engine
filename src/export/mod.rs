@@ -3,6 +3,7 @@
 pub mod gltf_export;
 pub mod mesh_export;
 pub mod obj;
+pub mod scene_snapshot;
 pub mod screenshot;
 
 use bevy::prelude::*;

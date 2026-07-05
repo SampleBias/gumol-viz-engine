@@ -28,7 +28,7 @@ use std::path::Path;
 const SUPPORTED_EXTENSIONS: &[&str] = &["xyz", "pdb", "gro", "dcd", "cif", "mmcif", "mcif"];
 
 /// Extensions that have implemented parsers (loadable)
-const LOADABLE_EXTENSIONS: &[&str] = &["xyz", "pdb", "gro"];
+const LOADABLE_EXTENSIONS: &[&str] = &["xyz", "pdb", "gro", "cif", "mmcif", "mcif", "dcd"];
 
 /// Resource holding receiver for async file picker results
 #[derive(Resource, Default)]
@@ -220,7 +220,7 @@ pub fn main_ui_panel(
 
                 std::thread::spawn(move || {
                     let result = rfd::FileDialog::new()
-                        .add_filter("Molecular files (XYZ, PDB)", LOADABLE_EXTENSIONS)
+                        .add_filter("Molecular files (XYZ, PDB, GRO, mmCIF, DCD)", LOADABLE_EXTENSIONS)
                         .add_filter("All molecular formats", SUPPORTED_EXTENSIONS)
                         .add_filter("All files", &["*"])
                         .pick_file();
@@ -381,6 +381,7 @@ pub fn main_ui_panel(
                         commands.entity(selected_entity).remove::<crate::interaction::selection::Selected>();
                     }
                     selection.clear();
+                    commands.trigger(crate::interaction::selection::SelectionClearedEvent);
                 }
             } else {
                 ui.label("No atoms selected");

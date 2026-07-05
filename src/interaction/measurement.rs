@@ -1,13 +1,10 @@
 //! Distance and angle measurement tools
 //!
-//! Computes measurements from selected atoms:
-//! - 2 atoms: distance (Å)
-//! - 3 atoms: angle at middle atom (degrees)
-//! - 4 atoms: dihedral angle (degrees)
+//! Computes measurements from selected atoms via instanced position data.
 
-use crate::core::atom::Atom;
 use crate::interaction::selection::SelectionState;
-use crate::systems::spawning::SpawnedAtom;
+use crate::rendering::atom_index::InstancedAtomIndex;
+use crate::rendering::instanced::{InstancedAtomEntity, InstancedAtomMesh};
 use bevy::prelude::*;
 
 /// Resource holding current measurement results for display
@@ -21,42 +18,37 @@ pub struct MeasurementState {
     pub dihedral: Option<f32>,
 }
 
-/// Compute measurements from selected atoms
+/// Compute measurements from selected atom IDs and instanced positions.
 pub fn compute_measurements(
     selection: Res<SelectionState>,
-    atom_query: Query<(&Atom, &Transform), With<SpawnedAtom>>,
+    index: Res<InstancedAtomIndex>,
+    instanced: Query<(&InstancedAtomEntity, &InstancedAtomMesh)>,
     mut measurements: ResMut<MeasurementState>,
 ) {
     measurements.distance = None;
     measurements.angle = None;
     measurements.dihedral = None;
 
-    let entities: Vec<Entity> = selection.entities().to_vec();
-    if entities.is_empty() {
+    let atom_ids = selection.atom_ids();
+    if atom_ids.is_empty() || index.atom_to_instance.is_empty() {
         return;
     }
 
-    // Get positions of selected atoms in order
-    let positions: Vec<Vec3> = entities
+    let positions: Vec<Vec3> = atom_ids
         .iter()
-        .filter_map(|e| atom_query.get(*e).ok())
-        .map(|(_, t)| t.translation)
+        .filter_map(|id| index.get_position(*id, &instanced))
         .collect();
 
     match positions.len() {
         2 => {
-            let d = positions[0].distance(positions[1]);
-            measurements.distance = Some(d);
+            measurements.distance = Some(positions[0].distance(positions[1]));
         }
         3 => {
-            // Angle at position 1 (middle atom): angle between v1->v0 and v1->v2
             let v01 = positions[0] - positions[1];
             let v21 = positions[2] - positions[1];
-            let angle_rad = v01.angle_between(v21);
-            measurements.angle = Some(angle_rad.to_degrees());
+            measurements.angle = Some(v01.angle_between(v21).to_degrees());
         }
         4.. => {
-            // Dihedral: angle between planes (0,1,2) and (1,2,3)
             let b1 = positions[1] - positions[0];
             let b2 = positions[2] - positions[1];
             let b3 = positions[3] - positions[2];
@@ -74,15 +66,13 @@ pub fn compute_measurements(
                 let m = n1.cross(b2_norm);
                 let x = n1.dot(n2);
                 let y = m.dot(n2);
-                let dihedral_rad = y.atan2(x);
-                measurements.dihedral = Some(dihedral_rad.to_degrees());
+                measurements.dihedral = Some(y.atan2(x).to_degrees());
             }
         }
         _ => {}
     }
 }
 
-/// Register measurement systems
 pub fn register(app: &mut App) {
     app.init_resource::<MeasurementState>()
         .add_systems(Update, compute_measurements);

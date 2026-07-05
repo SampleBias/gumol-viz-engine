@@ -23,6 +23,8 @@ pub struct SimulationData {
     pub trajectory: Trajectory,
     /// Atom metadata (static data that doesn't change between frames)
     pub atom_data: Vec<AtomData>,
+    /// Bond topology from file (e.g. PDB CONECT) or empty for distance detection
+    pub bond_data: Vec<crate::core::bond::BondData>,
     /// Whether data is loaded
     pub loaded: bool,
 }
@@ -32,6 +34,7 @@ impl Default for SimulationData {
         Self {
             trajectory: Trajectory::new(PathBuf::new(), 0, 1.0),
             atom_data: Vec::new(),
+            bond_data: Vec::new(),
             loaded: false,
         }
     }
@@ -43,6 +46,17 @@ impl SimulationData {
         Self {
             trajectory,
             atom_data,
+            bond_data: Vec::new(),
+            loaded: true,
+        }
+    }
+
+    /// Create simulation data with explicit bond topology
+    pub fn with_bonds(trajectory: Trajectory, atom_data: Vec<AtomData>, bond_data: Vec<crate::core::bond::BondData>) -> Self {
+        Self {
+            trajectory,
+            atom_data,
+            bond_data,
             loaded: true,
         }
     }
@@ -119,7 +133,7 @@ pub struct FileLoadErrorEvent {
 }
 
 /// Load a file based on its format
-fn load_file(path: &Path) -> IOResult<(Trajectory, Vec<AtomData>)> {
+fn load_file(path: &Path) -> IOResult<(Trajectory, Vec<AtomData>, Vec<crate::core::bond::BondData>)> {
     let format = FileFormat::from_path(path);
 
     info!("Loading file: {:?} (format: {:?})", path, format);
@@ -127,46 +141,27 @@ fn load_file(path: &Path) -> IOResult<(Trajectory, Vec<AtomData>)> {
     match format {
         FileFormat::XYZ => {
             let trajectory = XYZParser::parse_file(path)?;
-
-            // For XYZ files, we need to create atom data from the first frame
             let atom_data = create_atom_data_from_xyz(&trajectory)?;
-
-            Ok((trajectory, atom_data))
+            Ok((trajectory, atom_data, Vec::new()))
         }
         FileFormat::PDB => {
-            // PDB parsing needs to return atom data
-            let trajectory = PDBParser::parse_file(path)?;
-
-            // Create atom data from the trajectory
-            let atom_data = create_atom_data_from_pdb(&trajectory)?;
-
-            Ok((trajectory, atom_data))
+            let (trajectory, atom_data, bond_data) = PDBParser::parse_file_with_atoms(path)?;
+            Ok((trajectory, atom_data, bond_data))
         }
         FileFormat::GRO => {
             let trajectory = GroParser::parse_file(path)?;
-
-            // For GRO files, we need to create atom data from the first frame
             let atom_data = create_atom_data_from_gro(&trajectory)?;
-
-            Ok((trajectory, atom_data))
+            Ok((trajectory, atom_data, Vec::new()))
         }
         FileFormat::MmCIF => {
             let trajectory = MmcifParser::parse_file(path)?;
-
-            // For mmCIF files, we need to create atom data from the first frame
             let atom_data = create_atom_data_from_mmcif(&trajectory)?;
-
-            Ok((trajectory, atom_data))
+            Ok((trajectory, atom_data, Vec::new()))
         }
         FileFormat::DCD => {
-            // DCD files only contain positions, not atom data
-            // This would need to be paired with a structure file
             let trajectory = crate::io::dcd::DcdParser::parse_file(path)?;
-
-            // Create placeholder atom data
             let atom_data = create_placeholder_atom_data(&trajectory)?;
-
-            Ok((trajectory, atom_data))
+            Ok((trajectory, atom_data, Vec::new()))
         }
         _ => Err(crate::io::IOError::UnsupportedFormat(format!("{:?}", format))),
     }
@@ -229,28 +224,6 @@ fn create_atom_data_from_xyz(trajectory: &Trajectory) -> IOResult<Vec<AtomData>>
                     format!("ATOM{}", atom_id),
                 ));
             }
-        }
-    }
-
-    Ok(atom_data)
-}
-
-/// Create atom data from PDB trajectory
-fn create_atom_data_from_pdb(trajectory: &Trajectory) -> IOResult<Vec<AtomData>> {
-    // For PDB files, we need to parse the atom data
-    // This is a placeholder - in a real implementation, the PDB parser would return this
-    let mut atom_data = Vec::new();
-
-    if let Some(first_frame) = trajectory.get_frame(0) {
-        for atom_id in first_frame.atom_ids() {
-            atom_data.push(AtomData::new(
-                *atom_id,
-                crate::core::atom::Element::C, // Default to carbon
-                0,
-                "UNK".to_string(),
-                "A".to_string(),
-                format!("ATOM{}", atom_id),
-            ));
         }
     }
 
@@ -355,16 +328,17 @@ pub fn handle_load_file_events(
 
         // Attempt to load the file
         match load_file(&event.path) {
-            Ok((trajectory, atom_data)) => {
+            Ok((trajectory, atom_data, bond_data)) => {
                 info!(
-                    "Successfully loaded file: {} atoms, {} frames",
+                    "Successfully loaded file: {} atoms, {} frames, {} bonds",
                     atom_data.len(),
-                    trajectory.num_frames()
+                    trajectory.num_frames(),
+                    bond_data.len()
                 );
 
-                // Update simulation data resource
                 sim_data.trajectory = trajectory.clone();
                 sim_data.atom_data = atom_data.clone();
+                sim_data.bond_data = bond_data;
                 sim_data.loaded = true;
 
                 // Update file handle - handle resource outside of event loop

@@ -1,63 +1,45 @@
 //! OBJ format export
-//!
-//! Exports atoms (spheres) and bonds (cylinders) to Wavefront OBJ format
-//! for use in Blender, MeshLab, and other 3D tools.
 
 use crate::core::bond::Bond;
+use crate::core::visualization::VisualizationConfig;
 use crate::export::mesh_export::{generate_cylinder_mesh, generate_sphere_mesh, transform_vertex};
-use crate::systems::spawning::SpawnedAtom;
+use crate::export::scene_snapshot::{capture_scene, SceneSnapshot};
+use crate::rendering::atom_index::InstancedAtomIndex;
+use crate::rendering::instanced::{InstancedAtomEntity, InstancedAtomMesh};
+use crate::systems::bonds::BondEntities;
+use crate::systems::loading::SimulationData;
 use bevy::prelude::*;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
-/// Event to request OBJ export
 #[derive(Event, Debug)]
 pub struct RequestExportObjEvent {
     pub path: PathBuf,
 }
 
-/// Data collected for export (cloned for thread)
-struct ExportData {
-    atoms: Vec<(Vec3, f32)>,
-    bonds: Vec<(Vec3, Quat, f32, f32)>,
-}
-
-/// Handle OBJ export requests
 pub fn handle_export_obj(
     mut requests: EventReader<RequestExportObjEvent>,
-    atom_query: Query<(&Transform, &crate::core::atom::Atom), With<SpawnedAtom>>,
+    sim_data: Res<SimulationData>,
+    viz_config: Res<VisualizationConfig>,
+    index: Res<InstancedAtomIndex>,
+    instanced: Query<(&InstancedAtomEntity, &InstancedAtomMesh)>,
     bond_query: Query<(&Transform, &Bond)>,
-    atom_entities: Res<crate::systems::spawning::AtomEntities>,
-    bond_entities: Res<crate::systems::bonds::BondEntities>,
+    bond_entities: Res<BondEntities>,
 ) {
     for event in requests.read() {
-        let mut data = ExportData {
-            atoms: Vec::new(),
-            bonds: Vec::new(),
-        };
-
-        for (_, entity) in atom_entities.entities.iter() {
-            if let Ok((transform, atom)) = atom_query.get(*entity) {
-                let radius = atom.element.vdw_radius() * 0.5;
-                data.atoms.push((transform.translation, radius));
-            }
-        }
-
-        for (_, entity) in bond_entities.entities.iter() {
-            if let Ok((transform, bond)) = bond_query.get(*entity) {
-                data.bonds.push((
-                    transform.translation,
-                    transform.rotation,
-                    bond.length,
-                    0.1, // bond radius
-                ));
-            }
-        }
+        let snapshot = capture_scene(
+            &index,
+            &instanced,
+            &sim_data.atom_data,
+            &bond_query,
+            &bond_entities,
+            &viz_config,
+        );
 
         let path = event.path.clone();
         std::thread::spawn(move || {
-            if let Err(e) = write_obj(&path, &data) {
+            if let Err(e) = write_obj(&path, &snapshot) {
                 error!("OBJ export failed: {}", e);
             } else {
                 info!("Exported OBJ to {:?}", path);
@@ -66,7 +48,7 @@ pub fn handle_export_obj(
     }
 }
 
-fn write_obj(path: &PathBuf, data: &ExportData) -> std::io::Result<()> {
+fn write_obj(path: &PathBuf, data: &SceneSnapshot) -> std::io::Result<()> {
     let file = File::create(path)?;
     let mut w = BufWriter::new(file);
 
@@ -74,15 +56,13 @@ fn write_obj(path: &PathBuf, data: &ExportData) -> std::io::Result<()> {
     writeln!(w, "# Atoms: {}, Bonds: {}", data.atoms.len(), data.bonds.len())?;
     writeln!(w, "o molecule")?;
 
-    let mut vertex_offset: u32 = 1; // OBJ uses 1-based indexing
+    let mut vertex_offset: u32 = 1;
 
-    // Export atoms (spheres)
     let (sphere_verts, sphere_indices) = generate_sphere_mesh(1.0);
-    for (pos, radius) in &data.atoms {
-        let scale = Vec3::splat(*radius);
+    for atom in &data.atoms {
         for v in &sphere_verts {
-            let scaled = [v[0] * scale.x, v[1] * scale.y, v[2] * scale.z];
-            let world = transform_vertex(scaled, *pos, Quat::IDENTITY);
+            let scaled = [v[0] * atom.radius, v[1] * atom.radius, v[2] * atom.radius];
+            let world = transform_vertex(scaled, atom.position, Quat::IDENTITY);
             writeln!(w, "v {} {} {}", world[0], world[1], world[2])?;
         }
         for tri in sphere_indices.chunks(3) {
@@ -97,11 +77,10 @@ fn write_obj(path: &PathBuf, data: &ExportData) -> std::io::Result<()> {
         vertex_offset += sphere_verts.len() as u32;
     }
 
-    // Export bonds (cylinders)
-    for (translation, rotation, length, radius) in &data.bonds {
-        let (cyl_verts, cyl_indices) = generate_cylinder_mesh(*length, *radius);
+    for bond in &data.bonds {
+        let (cyl_verts, cyl_indices) = generate_cylinder_mesh(bond.length, bond.radius);
         for v in &cyl_verts {
-            let world = transform_vertex(*v, *translation, *rotation);
+            let world = transform_vertex(*v, bond.translation, bond.rotation);
             writeln!(w, "v {} {} {}", world[0], world[1], world[2])?;
         }
         for tri in cyl_indices.chunks(3) {
@@ -120,7 +99,6 @@ fn write_obj(path: &PathBuf, data: &ExportData) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Register OBJ export systems
 pub fn register(app: &mut App) {
     app.add_event::<RequestExportObjEvent>()
         .add_systems(Update, handle_export_obj);

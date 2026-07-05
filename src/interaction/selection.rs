@@ -3,14 +3,17 @@
 //! This system handles atom selection via raycasting and manages
 //! selection state for interaction with atoms.
 
+use crate::interaction::pick_proxy::PickProxy;
 use bevy::prelude::*;
 use bevy_mod_picking::prelude::*;
 
 /// Resource tracking the current selection state
 #[derive(Resource, Default, Debug, Clone)]
 pub struct SelectionState {
-    /// List of selected atom entities
+    /// Pick-proxy entities currently selected
     pub selected_entities: Vec<Entity>,
+    /// Atom IDs currently selected (stable across instanced rendering)
+    pub selected_atom_ids: Vec<u32>,
     /// Last selected entity (for single-select operations)
     pub last_selected: Option<Entity>,
     /// Selection mode (single, multiple, box)
@@ -41,39 +44,48 @@ impl SelectionState {
     /// Clear all selections
     pub fn clear(&mut self) {
         self.selected_entities.clear();
+        self.selected_atom_ids.clear();
         self.last_selected = None;
     }
 
-    /// Add an entity to selection
-    pub fn add(&mut self, entity: Entity) {
-        if !self.selected_entities.contains(&entity) {
+    /// Add an entity and atom ID to selection
+    pub fn add(&mut self, entity: Entity, atom_id: u32) {
+        if !self.selected_atom_ids.contains(&atom_id) {
             self.selected_entities.push(entity);
+            self.selected_atom_ids.push(atom_id);
             self.last_selected = Some(entity);
         }
     }
 
     /// Remove an entity from selection
-    pub fn remove(&mut self, entity: Entity) {
+    pub fn remove(&mut self, entity: Entity, atom_id: u32) {
         self.selected_entities.retain(|&e| e != entity);
+        self.selected_atom_ids.retain(|&id| id != atom_id);
         if self.last_selected == Some(entity) {
             self.last_selected = self.selected_entities.last().copied();
         }
     }
 
     /// Toggle selection of an entity
-    pub fn toggle(&mut self, entity: Entity) {
-        if self.is_selected(entity) {
-            self.remove(entity);
+    pub fn toggle(&mut self, entity: Entity, atom_id: u32) {
+        if self.selected_atom_ids.contains(&atom_id) {
+            self.remove(entity, atom_id);
         } else {
-            self.add(entity);
+            self.add(entity, atom_id);
         }
     }
 
     /// Replace selection with a single entity
-    pub fn set(&mut self, entity: Entity) {
+    pub fn set(&mut self, entity: Entity, atom_id: u32) {
         self.selected_entities.clear();
+        self.selected_atom_ids.clear();
         self.selected_entities.push(entity);
+        self.selected_atom_ids.push(atom_id);
         self.last_selected = Some(entity);
+    }
+
+    pub fn atom_ids(&self) -> &[u32] {
+        &self.selected_atom_ids
     }
 
     /// Get all selected entities
@@ -124,16 +136,16 @@ pub fn handle_atom_selection(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut click_events: EventReader<Pointer<Click>>,
     atom_query: Query<
-        (Entity, Option<&Selected>),
-        With<crate::systems::spawning::SpawnedAtom>,
+        (Entity, Option<&Selected>, &PickProxy),
     >,
 ) {
     // Process click events from bevy_mod_picking
     for event in click_events.read() {
         let entity = event.target;
 
-        // Check if this is an atom
-        if atom_query.get(entity).is_ok() {
+        // Check if this is a pick proxy atom
+        if let Ok((_, _, proxy)) = atom_query.get(entity) {
+            let atom_id = proxy.atom_id;
             let is_shift_held = keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
             let is_ctrl_held = keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
 
@@ -144,46 +156,38 @@ pub fn handle_atom_selection(
                 SelectionAction::Set
             };
 
-            // Get current selection state
-            let is_selected = selection.is_selected(entity);
+            let is_selected_id = selection.selected_atom_ids.contains(&atom_id);
 
             match action {
                 SelectionAction::Set => {
-                    // Clear existing selection and select this atom
-                    // Deselect all currently selected atoms
                     for selected_entity in selection.entities().iter().copied().collect::<Vec<_>>() {
-                        if selected_entity != entity {
-                            commands.entity(selected_entity).remove::<Selected>();
-                            deselected_events.send(AtomDeselectedEvent { entity: selected_entity });
-                        }
+                        commands.entity(selected_entity).remove::<Selected>();
+                        deselected_events.send(AtomDeselectedEvent {
+                            entity: selected_entity,
+                        });
                     }
+                    selection.clear();
 
-                    // Select or deselect clicked atom
-                    if is_selected {
-                        commands.entity(entity).remove::<Selected>();
-                        selection.remove(entity);
-                        deselected_events.send(AtomDeselectedEvent { entity });
-                    } else {
+                    if !is_selected_id {
                         commands.entity(entity).insert(Selected);
-                        selection.set(entity);
+                        selection.set(entity, atom_id);
                         selected_events.send(AtomSelectedEvent { entity });
                     }
                 }
                 SelectionAction::Toggle => {
-                    // Toggle selection of clicked atom
-                    if is_selected {
+                    if is_selected_id {
                         commands.entity(entity).remove::<Selected>();
-                        selection.remove(entity);
+                        selection.remove(entity, atom_id);
                         deselected_events.send(AtomDeselectedEvent { entity });
                     } else {
                         commands.entity(entity).insert(Selected);
-                        selection.add(entity);
+                        selection.add(entity, atom_id);
                         selected_events.send(AtomSelectedEvent { entity });
                     }
                 }
             }
 
-            info!("Atom {:?} selected (total: {})", entity, selection.len());
+            info!("Atom {} selected (total: {})", atom_id, selection.len());
         }
     }
 
@@ -208,64 +212,25 @@ enum SelectionAction {
     Toggle,
 }
 
-/// Update atom highlighting based on selection state
-pub fn update_selection_highlight(
+/// Instanced rendering handles highlight colors; keep Selected marker in sync.
+pub fn sync_selection_markers(
     mut commands: Commands,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     selection: Res<SelectionState>,
-    mut atom_query: Query<
-        (
-            Entity,
-            Option<&Selected>,
-            &mut Handle<StandardMaterial>,
-            &crate::core::atom::Atom,
-        ),
-        With<crate::systems::spawning::SpawnedAtom>,
-    >,
+    pick_query: Query<(Entity, Option<&Selected>, &PickProxy)>,
 ) {
-    // Highlight color for selected atoms (yellow with emissive glow)
-    let highlight_color = Color::srgb(1.0, 1.0, 0.0);
+    if !selection.is_changed() {
+        return;
+    }
 
-    for (entity, is_selected, mut material_handle, atom) in atom_query.iter_mut() {
-        let should_be_selected = selection.is_selected(entity);
+    let selected_entities: std::collections::HashSet<Entity> =
+        selection.selected_entities.iter().copied().collect();
 
-        // Ensure Selected component matches selection state
-        if should_be_selected && is_selected.is_none() {
+    for (entity, is_selected, _) in pick_query.iter() {
+        let should_select = selected_entities.contains(&entity);
+        if should_select && is_selected.is_none() {
             commands.entity(entity).insert(Selected);
-        } else if !should_be_selected && is_selected.is_some() {
+        } else if !should_select && is_selected.is_some() {
             commands.entity(entity).remove::<Selected>();
-        }
-
-        // Update material based on selection state
-        if let Some(material) = materials.get(material_handle.id()) {
-            let current_color = material.base_color;
-            let is_highlighted = current_color == highlight_color;
-            let should_highlight = selection.is_selected(entity);
-
-            // Only update material if highlight state changed
-            if should_highlight != is_highlighted {
-                if should_highlight {
-                    // Create highlight material (yellow with emissive glow)
-                    let highlight_material = materials.add(StandardMaterial {
-                        base_color: highlight_color,
-                        emissive: LinearRgba::rgb(0.5, 0.5, 0.0),
-                        metallic: 0.3,
-                        perceptual_roughness: 0.2,
-                        ..default()
-                    });
-                    *material_handle = highlight_material;
-                } else {
-                    // Restore original CPK color
-                    let cpk_color = atom.element.cpk_color();
-                    let original_material = materials.add(StandardMaterial {
-                        base_color: Color::srgb(cpk_color[0], cpk_color[1], cpk_color[2]),
-                        metallic: 0.1,
-                        perceptual_roughness: 0.2,
-                        ..default()
-                    });
-                    *material_handle = original_material;
-                }
-            }
         }
     }
 }
@@ -313,7 +278,7 @@ pub fn register(app: &mut App) {
         .add_event::<AtomDeselectedEvent>()
         .add_event::<SelectionClearedEvent>()
         .add_systems(Update, handle_atom_selection)
-        .add_systems(Update, update_selection_highlight)
+        .add_systems(Update, sync_selection_markers)
         .add_systems(Update, clear_selection_on_load);
 
     info!("Atom selection systems registered");
@@ -330,15 +295,15 @@ mod tests {
         assert_eq!(selection.len(), 0);
 
         let entity = Entity::PLACEHOLDER;
-        selection.add(entity);
+        selection.add(entity, 1);
         assert_eq!(selection.len(), 1);
-        assert!(selection.is_selected(entity));
+        assert!(selection.selected_atom_ids.contains(&1));
 
-        selection.remove(entity);
+        selection.remove(entity, 1);
         assert!(selection.is_empty());
 
-        selection.set(entity);
-        assert!(selection.is_selected(entity));
+        selection.set(entity, 2);
+        assert!(selection.selected_atom_ids.contains(&2));
 
         selection.clear();
         assert!(selection.is_empty());
@@ -349,10 +314,10 @@ mod tests {
         let mut selection = SelectionState::new();
         let entity = Entity::PLACEHOLDER;
 
-        selection.toggle(entity);
-        assert!(selection.is_selected(entity));
+        selection.toggle(entity, 3);
+        assert!(selection.selected_atom_ids.contains(&3));
 
-        selection.toggle(entity);
-        assert!(!selection.is_selected(entity));
+        selection.toggle(entity, 3);
+        assert!(!selection.selected_atom_ids.contains(&3));
     }
 }

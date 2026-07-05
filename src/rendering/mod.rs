@@ -1,5 +1,6 @@
 //! Rendering systems and mesh generation
 
+pub mod atom_index;
 pub mod instanced;
 
 use bevy::{
