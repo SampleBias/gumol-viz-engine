@@ -20,13 +20,23 @@ pub struct PickProxyEntities {
 }
 
 /// Spawn one pick proxy per atom (tiny nearly-invisible sphere for raycasting).
+/// Returns `(entity map, selection enabled)`.
 pub fn spawn_pick_proxies(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     atom_data: &[AtomData],
     frame_positions: &HashMap<u32, Vec3>,
-) -> HashMap<u32, Entity> {
+    max_proxies: usize,
+) -> (HashMap<u32, Entity>, bool) {
+    if atom_data.len() > max_proxies {
+        warn!(
+            "Selection disabled: {} atoms exceeds pick proxy limit ({})",
+            atom_data.len(),
+            max_proxies
+        );
+        return (HashMap::new(), false);
+    }
     let pick_mesh = meshes.add(crate::rendering::generate_atom_mesh(0.35));
     let pick_material = materials.add(StandardMaterial {
         base_color: Color::srgba(1.0, 1.0, 1.0, 0.001),
@@ -69,7 +79,7 @@ pub fn spawn_pick_proxies(
         map.insert(atom.id, entity);
     }
 
-    map
+    (map, true)
 }
 
 pub fn register(app: &mut App) {

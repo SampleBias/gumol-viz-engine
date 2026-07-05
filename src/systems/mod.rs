@@ -36,11 +36,13 @@ pub fn register(app: &mut App) {
             // Group 1: file loading & input handling
             (
                 loading::handle_load_file_events,
+                loading::poll_async_load,
                 loading::print_simulation_data,
                 timeline::handle_timeline_input,
             ),
             // Group 2: react to file load — clear before spawn
             (
+                bonds::clear_spatial_index_on_load,
                 crate::rendering::instanced::clear_instanced_atoms_on_load,
                 crate::rendering::wireframe::clear_wireframe_on_load,
                 crate::rendering::ribbon::clear_ribbon_on_load,
@@ -52,6 +54,7 @@ pub fn register(app: &mut App) {
             crate::rendering::instanced::center_camera_on_file_load_instanced,
             // Group 4: bonds, wireframe, ribbon after instanced atoms exist
             (
+                bonds::build_spatial_index_on_spawn,
                 bonds::spawn_bonds,
                 crate::rendering::wireframe::spawn_wireframe_bonds,
                 crate::rendering::ribbon::build_backbone_on_load,
@@ -66,6 +69,11 @@ pub fn register(app: &mut App) {
                 bonds::update_bond_positions,
                 crate::rendering::wireframe::update_wireframe_bond_positions,
                 crate::rendering::ribbon::update_ribbon_positions,
+            ),
+            // Group 6b: performance (culling, LOD)
+            (
+                crate::rendering::culling::cull_instanced_atoms,
+                crate::rendering::lod_system::update_instanced_lod_meshes,
             ),
             // Group 7: visualization & selection
             (

@@ -1,7 +1,11 @@
 //! Rendering systems and mesh generation
 
 pub mod atom_index;
+pub mod culling;
 pub mod instanced;
+pub mod lod;
+pub mod lod_system;
+pub mod mesh_pool;
 pub mod ribbon;
 pub mod wireframe;
 
@@ -18,16 +22,13 @@ pub fn register(app: &mut App) {
     instanced::register(app);
     wireframe::register(app);
     ribbon::register(app);
+    mesh_pool::register(app);
     info!("Rendering module registered");
 }
 
-// Placeholder for atom mesh generation
-pub fn generate_atom_mesh(radius: f32) -> Mesh {
-    // Create a sphere manually for now
+// Sphere mesh generation with configurable resolution (used by LOD).
+pub fn generate_atom_mesh_sphere(radius: f32, latitudes: u32, longitudes: u32) -> Mesh {
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RENDER_ASSET_USAGES);
-    // Simple UV sphere implementation
-    let latitudes = 16;
-    let longitudes = 32;
     let mut vertices = Vec::new();
     let mut normals = Vec::new();
     let mut uvs = Vec::new();
@@ -75,6 +76,11 @@ pub fn generate_atom_mesh(radius: f32) -> Mesh {
     mesh.insert_indices(Indices::U32(indices));
 
     mesh
+}
+
+/// Default high-quality atom sphere (16×32).
+pub fn generate_atom_mesh(radius: f32) -> Mesh {
+    generate_atom_mesh_sphere(radius, 16, 32)
 }
 
 // Placeholder for bond mesh generation

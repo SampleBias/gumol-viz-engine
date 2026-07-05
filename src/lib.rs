@@ -46,6 +46,7 @@ pub mod camera;
 pub mod interaction;
 pub mod ui;
 pub mod export;
+pub mod performance;
 pub mod utils;
 
 use bevy::prelude::*;
@@ -72,6 +73,7 @@ impl Plugin for GumolVizPlugin {
         io::register(app);
         rendering::register(app);
         systems::register(app);
+        performance::register(app);
         camera::register(app);
         interaction::register(app);
         ui::register(app);

@@ -3,7 +3,9 @@
 //! Used when `RenderMode::Wireframe` is active — atoms are hidden and bonds
 //! are drawn as thin unlit lines between connected atom pairs.
 
+use crate::performance::PerformanceSettings;
 use crate::systems::bonds::{resolve_bond_list, BondDetectionConfig};
+use crate::utils::spatial_index::AtomSpatialIndex;
 use crate::core::visualization::VisualizationConfig;
 use crate::rendering::atom_index::InstancedAtomIndex;
 use crate::rendering::instanced::{InstancedAtomEntity, InstancedAtomMesh, InstancedAtomsSpawnedEvent};
@@ -46,6 +48,8 @@ fn collect_bond_segments(
     index: &InstancedAtomIndex,
     instanced: &Query<(&InstancedAtomEntity, &InstancedAtomMesh)>,
     bond_config: &BondDetectionConfig,
+    perf: &PerformanceSettings,
+    spatial_index: Option<&AtomSpatialIndex>,
 ) -> Vec<(Vec3, Vec3)> {
     let positions = if positions.is_empty() {
         index.collect_positions(instanced)
@@ -53,7 +57,7 @@ fn collect_bond_segments(
         positions.clone()
     };
 
-    let bonds = resolve_bond_list(sim_data, &positions, bond_config);
+    let bonds = resolve_bond_list(sim_data, &positions, bond_config, perf, spatial_index);
 
     let mut segments = Vec::with_capacity(bonds.len());
     for bond in bonds {
@@ -75,6 +79,8 @@ pub fn spawn_wireframe_bonds(
     mut materials: ResMut<Assets<StandardMaterial>>,
     sim_data: Res<SimulationData>,
     bond_config: Res<BondDetectionConfig>,
+    perf: Res<PerformanceSettings>,
+    spatial_index: Res<AtomSpatialIndex>,
     index: Res<InstancedAtomIndex>,
     instanced: Query<(&InstancedAtomEntity, &InstancedAtomMesh)>,
     mut wireframe_entities: ResMut<WireframeBondEntities>,
@@ -88,7 +94,7 @@ pub fn spawn_wireframe_bonds(
         return;
     }
 
-    let segments = collect_bond_segments(&sim_data, &HashMap::new(), &index, &instanced, &bond_config);
+    let segments = collect_bond_segments(&sim_data, &HashMap::new(), &index, &instanced, &bond_config, &perf, Some(&spatial_index));
     if segments.is_empty() {
         return;
     }
@@ -120,6 +126,8 @@ pub fn spawn_wireframe_bonds(
 pub fn update_wireframe_bond_positions(
     sim_data: Res<SimulationData>,
     bond_config: Res<BondDetectionConfig>,
+    perf: Res<PerformanceSettings>,
+    spatial_index: Res<AtomSpatialIndex>,
     index: Res<InstancedAtomIndex>,
     instanced: Query<(&InstancedAtomEntity, &InstancedAtomMesh)>,
     mut wireframe_entities: ResMut<WireframeBondEntities>,
@@ -143,7 +151,7 @@ pub fn update_wireframe_bond_positions(
         return;
     };
 
-    let segments = collect_bond_segments(&sim_data, &HashMap::new(), &index, &instanced, &bond_config);
+    let segments = collect_bond_segments(&sim_data, &HashMap::new(), &index, &instanced, &bond_config, &perf, Some(&spatial_index));
     if segments.is_empty() {
         return;
     }

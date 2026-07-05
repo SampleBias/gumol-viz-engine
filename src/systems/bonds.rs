@@ -3,11 +3,13 @@
 //! Detects bonds from file topology or distance heuristics and renders
 //! cylinder meshes synced to instanced atom positions.
 
-use crate::core::atom::Element;
+use crate::core::atom::{AtomData, Element};
 use crate::core::bond::{Bond, BondData, BondOrder, BondType};
 use crate::core::visualization::VisualizationConfig;
 use crate::rendering;
+use crate::performance::PerformanceSettings;
 use crate::rendering::atom_index::InstancedAtomIndex;
+use crate::utils::spatial_index::AtomSpatialIndex;
 use crate::rendering::instanced::{InstancedAtomEntity, InstancedAtomMesh};
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -143,7 +145,7 @@ fn compute_bond_rotation(bond_vector: Vec3, bond_length: f32) -> Quat {
     }
 }
 
-fn detect_bonds_from_distance(
+fn detect_bonds_naive(
     sim_data: &crate::systems::loading::SimulationData,
     positions: &HashMap<u32, Vec3>,
     config: &BondDetectionConfig,
@@ -187,6 +189,72 @@ fn detect_bonds_from_distance(
     bonds
 }
 
+fn detect_bonds_spatial(
+    sim_data: &crate::systems::loading::SimulationData,
+    positions: &HashMap<u32, Vec3>,
+    config: &BondDetectionConfig,
+    spatial_index: &AtomSpatialIndex,
+) -> Vec<BondData> {
+    let mut bonds = Vec::new();
+    let atom_map: HashMap<u32, &AtomData> =
+        sim_data.atom_data.iter().map(|a| (a.id, a)).collect();
+
+    for atom in &sim_data.atom_data {
+        let Some(pos_a) = positions.get(&atom.id) else {
+            continue;
+        };
+
+        let neighbors = spatial_index.neighbors_within(*pos_a, config.max_bond_distance);
+        for neighbor_id in neighbors {
+            if neighbor_id <= atom.id {
+                continue;
+            }
+            let Some(atom_b) = atom_map.get(&neighbor_id) else {
+                continue;
+            };
+            let Some(pos_b) = positions.get(&neighbor_id) else {
+                continue;
+            };
+            let distance = pos_a.distance(*pos_b);
+            if config.should_bond(
+                atom.element,
+                atom_b.element,
+                atom.residue_id,
+                atom_b.residue_id,
+                distance,
+            ) {
+                bonds.push(BondData::new(
+                    atom.id,
+                    neighbor_id,
+                    config.determine_bond_type(atom.element, atom_b.element),
+                    config.determine_bond_order(atom.element, atom_b.element, distance),
+                    distance,
+                ));
+            }
+        }
+    }
+
+    bonds
+}
+
+fn detect_bonds_from_distance(
+    sim_data: &crate::systems::loading::SimulationData,
+    positions: &HashMap<u32, Vec3>,
+    config: &BondDetectionConfig,
+    perf: &PerformanceSettings,
+    spatial_index: Option<&AtomSpatialIndex>,
+) -> Vec<BondData> {
+    let use_spatial = perf.spatial_bond_detection
+        && sim_data.atom_data.len() >= perf.spatial_bond_threshold
+        && spatial_index.map(|s| s.is_built()).unwrap_or(false);
+
+    if use_spatial {
+        detect_bonds_spatial(sim_data, positions, config, spatial_index.unwrap())
+    } else {
+        detect_bonds_naive(sim_data, positions, config)
+    }
+}
+
 fn dedupe_bonds(bonds: Vec<BondData>) -> Vec<BondData> {
     let mut seen = HashMap::new();
     for bond in bonds {
@@ -200,14 +268,21 @@ pub fn resolve_bond_list(
     sim_data: &crate::systems::loading::SimulationData,
     positions: &HashMap<u32, Vec3>,
     config: &BondDetectionConfig,
+    perf: &PerformanceSettings,
+    spatial_index: Option<&AtomSpatialIndex>,
 ) -> Vec<BondData> {
+    let start = std::time::Instant::now();
     let bonds = if !sim_data.bond_data.is_empty() {
         sim_data.bond_data.clone()
     } else if config.enabled {
-        detect_bonds_from_distance(sim_data, positions, config)
+        detect_bonds_from_distance(sim_data, positions, config, perf, spatial_index)
     } else {
         Vec::new()
     };
+    let elapsed_ms = start.elapsed().as_secs_f32() * 1000.0;
+    if elapsed_ms > 1.0 {
+        debug!("Bond detection took {:.1} ms ({} bonds)", elapsed_ms, bonds.len());
+    }
     dedupe_bonds(bonds)
 }
 
@@ -222,6 +297,9 @@ pub fn spawn_bonds(
     instanced: Query<(&InstancedAtomEntity, &InstancedAtomMesh)>,
     mut bond_entities: ResMut<BondEntities>,
     config: Res<BondDetectionConfig>,
+    perf: Res<PerformanceSettings>,
+    spatial_index: Res<AtomSpatialIndex>,
+    mut diagnostics: ResMut<crate::performance::PerformanceDiagnostics>,
     spawned_events: EventReader<crate::rendering::instanced::InstancedAtomsSpawnedEvent>,
     mut bond_spawned: EventWriter<BondsSpawnedEvent>,
 ) {
@@ -235,7 +313,9 @@ pub fn spawn_bonds(
 
     let positions = index.collect_positions(&instanced);
 
-    let bonds = resolve_bond_list(&sim_data, &positions, &config);
+    let start = std::time::Instant::now();
+    let bonds = resolve_bond_list(&sim_data, &positions, &config, &perf, Some(&spatial_index));
+    diagnostics.last_bond_detection_ms = start.elapsed().as_secs_f32() * 1000.0;
 
     if bonds.is_empty() {
         return;
@@ -372,9 +452,38 @@ pub fn clear_bonds_on_load(
     }
 }
 
+pub fn build_spatial_index_on_spawn(
+    sim_data: Res<crate::systems::loading::SimulationData>,
+    index: Res<InstancedAtomIndex>,
+    instanced: Query<(&InstancedAtomEntity, &InstancedAtomMesh)>,
+    mut spatial_index: ResMut<AtomSpatialIndex>,
+    spawned_events: EventReader<crate::rendering::instanced::InstancedAtomsSpawnedEvent>,
+) {
+    if spawned_events.is_empty() || !sim_data.loaded {
+        return;
+    }
+
+    let positions = index.collect_positions(&instanced);
+    *spatial_index = AtomSpatialIndex::build(&sim_data.atom_data, &positions);
+    info!(
+        "Built atom spatial index ({} atoms)",
+        spatial_index.atom_count
+    );
+}
+
+pub fn clear_spatial_index_on_load(
+    mut spatial_index: ResMut<AtomSpatialIndex>,
+    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+) {
+    if !file_loaded_events.is_empty() {
+        spatial_index.clear();
+    }
+}
+
 pub fn register(app: &mut App) {
     app.init_resource::<BondEntities>()
         .init_resource::<BondDetectionConfig>()
+        .init_resource::<AtomSpatialIndex>()
         .add_event::<BondsSpawnedEvent>()
         .add_event::<BondsDespawnedEvent>();
 
@@ -384,6 +493,14 @@ pub fn register(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::prelude::{Quat, Vec3};
+
+    #[test]
+    fn test_compute_bond_rotation_identity() {
+        let rot = compute_bond_rotation(Vec3::Y, 1.0);
+        let diff = rot.angle_between(Quat::IDENTITY);
+        assert!(diff < 0.001, "Y-aligned bond should give identity rotation");
+    }
 
     #[test]
     fn test_bond_detection_config() {
@@ -408,9 +525,39 @@ mod tests {
     }
 
     #[test]
-    fn test_compute_bond_rotation_identity() {
-        let rot = compute_bond_rotation(Vec3::Y, 1.0);
-        let diff = rot.angle_between(Quat::IDENTITY);
-        assert!(diff < 0.001, "Y-aligned bond should give identity rotation");
+    fn test_spatial_bond_detection() {
+        let perf = PerformanceSettings {
+            spatial_bond_detection: true,
+            spatial_bond_threshold: 100,
+            ..Default::default()
+        };
+        let config = BondDetectionConfig::default();
+        let atoms: Vec<AtomData> = (0..200)
+            .map(|i| {
+                AtomData::new(
+                    i,
+                    Element::C,
+                    0,
+                    "UNK".into(),
+                    "A".into(),
+                    format!("C{i}"),
+                )
+            })
+            .collect();
+        let positions: HashMap<u32, Vec3> = atoms
+            .iter()
+            .map(|a| (a.id, Vec3::new(a.id as f32 * 1.4, 0.0, 0.0)))
+            .collect();
+        let spatial = AtomSpatialIndex::build(&atoms, &positions);
+        let sim = crate::systems::loading::SimulationData::new(
+            crate::core::trajectory::Trajectory::new(
+                std::path::PathBuf::from("bench.xyz"),
+                200,
+                1.0,
+            ),
+            atoms,
+        );
+        let bonds = resolve_bond_list(&sim, &positions, &config, &perf, Some(&spatial));
+        assert!(!bonds.is_empty());
     }
 }

@@ -10,7 +10,8 @@ use crate::core::trajectory::{FrameData, TimelineState};
 use crate::core::visualization::VisualizationConfig;
 use crate::interaction::selection::SelectionState;
 use crate::rendering::atom_index::InstancedAtomIndex;
-use crate::rendering::generate_atom_mesh;
+use crate::performance::PerformanceSettings;
+use crate::rendering::mesh_pool::AtomMeshPool;
 use bevy::core_pipeline::core_3d::Transparent3d;
 use bevy::ecs::{query::QueryItem, system::SystemParamItem};
 use bevy::pbr::{
@@ -55,6 +56,8 @@ pub struct AtomInstanceData {
 #[derive(Component, Clone, Debug)]
 pub struct InstancedAtomMesh {
     pub instances: Vec<AtomInstanceData>,
+    /// Cached visualization scale (before frustum culling).
+    pub mode_scale: f32,
 }
 
 impl ExtractComponent for InstancedAtomMesh {
@@ -65,6 +68,7 @@ impl ExtractComponent for InstancedAtomMesh {
     fn extract_component(item: QueryItem<'_, Self::QueryData>) -> Option<Self> {
         Some(InstancedAtomMesh {
             instances: item.instances.clone(),
+            mode_scale: item.mode_scale,
         })
     }
 }
@@ -98,6 +102,7 @@ pub struct InstancedAtomsSpawnedEvent {
 pub fn spawn_atoms_instanced_internal(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
+    mesh_pool: &mut AtomMeshPool,
     frame_data: &FrameData,
     atom_data: &[AtomData],
     viz_config: &VisualizationConfig,
@@ -127,8 +132,8 @@ pub fn spawn_atoms_instanced_internal(
     let mut ids_by_element: HashMap<Element, Vec<u32>> = HashMap::new();
 
     for (element, atoms) in &atoms_by_element {
-        let radius = element.vdw_radius() * 0.5;
-        let mesh = meshes.add(generate_atom_mesh(radius));
+        let lod = mesh_pool.current_lod();
+        let mesh = mesh_pool.get_atom_mesh(meshes, *element, lod);
         let color_rgb = element.cpk_color();
 
         let mut element_ids = Vec::with_capacity(atoms.len());
@@ -151,7 +156,10 @@ pub fn spawn_atoms_instanced_internal(
             .spawn((
                 mesh,
                 SpatialBundle::INHERITED_IDENTITY,
-                InstancedAtomMesh { instances },
+                InstancedAtomMesh {
+                    instances,
+                    mode_scale: instance_scale,
+                },
                 InstancedAtomEntity { element: *element },
                 NoFrustumCulling,
             ))
@@ -180,7 +188,10 @@ pub fn spawn_instanced_atoms_on_load(
     mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
     mut instanced_entities: ResMut<InstancedAtomEntities>,
     mut atom_index: ResMut<InstancedAtomIndex>,
+    mut mesh_pool: ResMut<AtomMeshPool>,
     mut pick_entities: ResMut<crate::interaction::pick_proxy::PickProxyEntities>,
+    perf: Res<PerformanceSettings>,
+    mut diagnostics: ResMut<crate::performance::PerformanceDiagnostics>,
     mut spawned_event: EventWriter<InstancedAtomsSpawnedEvent>,
 ) {
     if !instanced_entities.entities.is_empty() {
@@ -194,6 +205,7 @@ pub fn spawn_instanced_atoms_on_load(
             let (new_entities, ids_by_element) = spawn_atoms_instanced_internal(
                 &mut commands,
                 &mut meshes,
+                &mut mesh_pool,
                 first_frame,
                 &sim_data.atom_data,
                 &viz_config,
@@ -210,13 +222,29 @@ pub fn spawn_instanced_atoms_on_load(
                 .map(|(&id, &pos)| (id, pos))
                 .collect();
 
-            pick_entities.entities = crate::interaction::pick_proxy::spawn_pick_proxies(
+            let (pick_map, selection_ok) = crate::interaction::pick_proxy::spawn_pick_proxies(
                 &mut commands,
                 &mut meshes,
                 &mut materials,
                 &sim_data.atom_data,
                 &positions,
+                perf.max_pick_proxies,
             );
+            pick_entities.entities = pick_map;
+            diagnostics.selection_disabled = !selection_ok;
+            diagnostics.selection_disabled_reason = if selection_ok {
+                None
+            } else {
+                Some(format!(
+                    "Selection disabled for systems with more than {} atoms",
+                    perf.max_pick_proxies
+                ))
+            };
+
+            diagnostics.estimated_bytes =
+                crate::performance::memory::estimate_simulation_bytes(&sim_data);
+            diagnostics.memory_warning =
+                crate::performance::memory::memory_warning(&sim_data);
 
             spawned_event.send(InstancedAtomsSpawnedEvent {
                 count: sim_data.atom_data.len(),
@@ -231,10 +259,12 @@ pub fn clear_instanced_atoms_on_load(
     mut commands: Commands,
     mut instanced_entities: ResMut<InstancedAtomEntities>,
     mut atom_index: ResMut<InstancedAtomIndex>,
+    mut mesh_pool: ResMut<AtomMeshPool>,
     mut pick_entities: ResMut<crate::interaction::pick_proxy::PickProxyEntities>,
     file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
 ) {
     if !file_loaded_events.is_empty() {
+        mesh_pool.clear();
         if !pick_entities.entities.is_empty() {
             for (_, entity) in pick_entities.entities.drain() {
                 commands.entity(entity).despawn_recursive();
@@ -349,6 +379,7 @@ pub fn update_instanced_visualization(
     let instance_scale = if show_atoms { mode_scale.max(0.001) } else { 0.0 };
 
     for mut mesh in instanced_query.iter_mut() {
+        mesh.mode_scale = instance_scale;
         for instance in mesh.instances.iter_mut() {
             instance.scale = instance_scale;
         }

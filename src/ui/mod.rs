@@ -11,8 +11,9 @@ use crate::export::gltf_export::RequestExportGltfEvent;
 use crate::export::obj::RequestExportObjEvent;
 use crate::export::screenshot::RequestScreenshotEvent;
 use crate::io::FileFormat;
+use crate::performance::{memory, PerformanceDiagnostics};
 use crate::systems::loading::{
-    CliFileArg, FileLoadErrorEvent, LoadFileEvent, SimulationData,
+    AsyncLoadState, CliFileArg, FileLoadErrorEvent, LoadFileEvent, SimulationData,
 };
 use crate::rendering::instanced::InstancedAtomEntities;
 use crate::systems::bonds::{BondEntities, BondDetectionConfig};
@@ -200,6 +201,8 @@ pub fn main_ui_panel(
     mut contexts: bevy_egui::EguiContexts,
     sim_data: Res<SimulationData>,
     instanced_entities: Res<InstancedAtomEntities>,
+    async_load: Res<AsyncLoadState>,
+    perf_diag: Res<PerformanceDiagnostics>,
     cli_arg: Res<CliFileArg>,
     mut picker_state: ResMut<FilePickerState>,
     mut export_saves: ExportSaveStates,
@@ -261,6 +264,38 @@ pub fn main_ui_panel(
                 ui.label(format!("  Frames: {}", sim_data.num_frames()));
                 ui.label(format!("  Time: {:.2} fs", sim_data.total_time()));
                 ui.label(format!("  Draw calls: ~{}", instanced_entities.entities.len()));
+                if async_load.in_progress {
+                    ui.label(
+                        bevy_egui::egui::RichText::new("  Loading file (background)...")
+                            .color(bevy_egui::egui::Color32::from_rgb(200, 180, 50)),
+                    );
+                }
+                if perf_diag.estimated_bytes > 0 {
+                    ui.label(format!(
+                        "  Est. memory: {}",
+                        memory::format_bytes(perf_diag.estimated_bytes)
+                    ));
+                }
+                if let Some(ref warn) = perf_diag.memory_warning {
+                    ui.label(
+                        bevy_egui::egui::RichText::new(format!("  ⚠ {warn}"))
+                            .color(bevy_egui::egui::Color32::from_rgb(220, 140, 50)),
+                    );
+                }
+                if perf_diag.selection_disabled {
+                    if let Some(ref reason) = perf_diag.selection_disabled_reason {
+                        ui.label(
+                            bevy_egui::egui::RichText::new(format!("  ⚠ {reason}"))
+                                .color(bevy_egui::egui::Color32::from_rgb(220, 140, 50)),
+                        );
+                    }
+                }
+                ui.label(format!(
+                    "  Visible/Culled: {}/{}  LOD: {}",
+                    perf_diag.visible_instance_count,
+                    perf_diag.culled_instance_count,
+                    perf_diag.current_lod.name()
+                ));
             } else {
                 ui.label(
                     bevy_egui::egui::RichText::new("✗ No file loaded")

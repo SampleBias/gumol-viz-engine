@@ -75,6 +75,17 @@ impl SimulationData {
     pub fn total_time(&self) -> f32 {
         self.trajectory.total_time
     }
+
+    /// Contiguous positions for all `atom_data` entries in frame order (cache-friendly SoA).
+    pub fn frame_positions_dense(&self, frame_idx: usize) -> Option<Vec<Vec3>> {
+        let frame = self.trajectory.get_frame(frame_idx)?;
+        Some(
+            self.atom_data
+                .iter()
+                .map(|a| frame.get_position(a.id).unwrap_or(Vec3::ZERO))
+                .collect(),
+        )
+    }
 }
 
 /// Resource tracking the currently loaded file
@@ -309,8 +320,103 @@ fn create_placeholder_atom_data(trajectory: &Trajectory) -> IOResult<Vec<AtomDat
     Ok(atom_data)
 }
 
-/// System to handle file loading events
+/// Result of a background file load.
+type LoadResult = (Trajectory, Vec<AtomData>, Vec<crate::core::bond::BondData>);
+
+/// Tracks an in-flight async file load.
+#[derive(Resource, Default)]
+pub struct AsyncLoadState {
+    pub in_progress: bool,
+    receiver: Option<crossbeam_channel::Receiver<Result<LoadResult, String>>>,
+    pending_path: Option<PathBuf>,
+}
+
+/// Queue async file loads on a background thread.
 pub fn handle_load_file_events(
+    mut load_events: EventReader<LoadFileEvent>,
+    mut async_state: ResMut<AsyncLoadState>,
+) {
+    if load_events.is_empty() || async_state.in_progress {
+        return;
+    }
+
+    for event in load_events.read() {
+        info!("Queueing async load: {:?}", event.path);
+
+        let path = event.path.clone();
+        let (tx, rx) = crossbeam_channel::unbounded();
+        async_state.receiver = Some(rx);
+        async_state.pending_path = Some(path.clone());
+        async_state.in_progress = true;
+
+        std::thread::spawn(move || {
+            let result = load_file(&path).map_err(|e| e.to_string());
+            let _ = tx.send(result);
+        });
+        break;
+    }
+}
+
+/// Apply completed async loads on the main thread.
+pub fn poll_async_load(
+    mut commands: Commands,
+    mut async_state: ResMut<AsyncLoadState>,
+    mut sim_data: ResMut<SimulationData>,
+    mut load_success: EventWriter<FileLoadedEvent>,
+    mut load_error: EventWriter<FileLoadErrorEvent>,
+    mut diagnostics: ResMut<crate::performance::PerformanceDiagnostics>,
+) {
+    let Some(receiver) = async_state.receiver.take() else {
+        return;
+    };
+
+    match receiver.try_recv() {
+        Ok(Ok((trajectory, atom_data, bond_data))) => {
+            let path = async_state.pending_path.take().unwrap_or_default();
+            info!(
+                "Async load complete: {} atoms, {} frames",
+                atom_data.len(),
+                trajectory.num_frames()
+            );
+
+            sim_data.trajectory = trajectory.clone();
+            sim_data.atom_data = atom_data.clone();
+            sim_data.bond_data = bond_data;
+            sim_data.loaded = true;
+
+            let format = FileFormat::from_path(&path);
+            commands.insert_resource(FileHandle::new(path.clone(), format));
+
+            diagnostics.estimated_bytes =
+                crate::performance::memory::estimate_simulation_bytes(&sim_data);
+            diagnostics.memory_warning =
+                crate::performance::memory::memory_warning(&sim_data);
+
+            load_success.send(FileLoadedEvent {
+                path,
+                num_atoms: atom_data.len(),
+                num_frames: trajectory.num_frames(),
+            });
+
+            async_state.in_progress = false;
+        }
+        Ok(Err(err)) => {
+            let path = async_state.pending_path.take().unwrap_or_default();
+            error!("Async load failed {:?}: {}", path, err);
+            load_error.send(FileLoadErrorEvent { path, error: err });
+            async_state.in_progress = false;
+        }
+        Err(crossbeam_channel::TryRecvError::Empty) => {
+            async_state.receiver = Some(receiver);
+        }
+        Err(crossbeam_channel::TryRecvError::Disconnected) => {
+            async_state.in_progress = false;
+        }
+    }
+}
+
+/// Legacy sync loader kept for tests and benchmarks.
+pub fn handle_load_file_events_sync(
     mut commands: Commands,
     mut load_events: EventReader<LoadFileEvent>,
     mut load_success: EventWriter<FileLoadedEvent>,
@@ -434,6 +540,7 @@ pub fn register(app: &mut App) {
 
     app.init_resource::<SimulationData>()
         .insert_resource(CliFileArg(cli_path))
+        .init_resource::<AsyncLoadState>()
         .add_event::<LoadFileEvent>()
         .add_event::<FileLoadedEvent>()
         .add_event::<FileLoadErrorEvent>();
