@@ -7,9 +7,14 @@ pub mod pdb;
 pub mod gro;
 pub mod dcd;
 pub mod mmcif;
+pub mod topology;
+pub mod streaming;
 
 use bevy::prelude::*;
 use thiserror::Error;
+use crate::core::atom::AtomData;
+use crate::core::bond::BondData;
+use std::path::Path;
 
 /// Register all IO systems
 pub fn register(app: &mut App) {
@@ -76,8 +81,18 @@ impl FileFormat {
         )
     }
 
-    /// Detect file format from content
+    /// Detect file format from content (text or binary peek).
     pub fn from_content(content: &str) -> Self {
+        Self::from_bytes(content.as_bytes())
+    }
+
+    /// Detect file format from raw bytes (handles binary DCD magic).
+    pub fn from_bytes(data: &[u8]) -> Self {
+        if dcd::DcdParser::is_dcd_bytes(data) {
+            return FileFormat::DCD;
+        }
+
+        let content = std::str::from_utf8(data).unwrap_or("");
         let first_line = content.lines().next().unwrap_or("");
 
         // XYZ format: first line is number of atoms
@@ -115,5 +130,23 @@ impl FileFormat {
         }
 
         FileFormat::Unknown
+    }
+}
+
+/// Load atom metadata and bonds from a topology file (PDB, GRO, mmCIF).
+pub fn load_topology(path: &Path) -> IOResult<(Vec<AtomData>, Vec<BondData>)> {
+    match FileFormat::from_path(path) {
+        FileFormat::PDB => pdb::PDBParser::parse_topology(path),
+        FileFormat::GRO => {
+            let (atoms, bonds) = gro::GroParser::parse_topology(path)?;
+            Ok(topology::normalize_topology(atoms, bonds))
+        }
+        FileFormat::MmCIF => {
+            let atoms = mmcif::MmcifParser::parse_atom_data_from_file(path)?;
+            Ok((atoms, Vec::new()))
+        }
+        other => Err(IOError::UnsupportedFormat(format!(
+            "Topology format not supported: {other:?}"
+        ))),
     }
 }

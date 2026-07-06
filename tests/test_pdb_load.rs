@@ -38,3 +38,31 @@ END
     assert_eq!(atoms[1].element, Element::O);
     assert!(!bonds.is_empty());
 }
+
+#[test]
+fn test_load_1crn_pdb_metadata() {
+    let path = fixture("1CRN.pdb");
+    if !common::require_path(&path) {
+        return;
+    }
+
+    let (trajectory, atoms, _bonds) =
+        PDBParser::parse_file_with_atoms(&path).expect("1CRN.pdb should parse");
+
+    assert_eq!(trajectory.num_atoms, 327);
+    assert_eq!(atoms.len(), 327);
+    assert_eq!(trajectory.num_frames(), 1);
+
+    let elements: Vec<Element> = atoms.iter().map(|a| a.element).collect();
+    assert!(elements.contains(&Element::N));
+    assert!(elements.contains(&Element::C));
+    assert!(elements.contains(&Element::O));
+    assert!(elements.contains(&Element::S), "1CRN has disulfide (SG)");
+
+    let ca_atoms: Vec<_> = atoms.iter().filter(|a| a.name == "CA").collect();
+    assert!(!ca_atoms.is_empty());
+    assert!(ca_atoms.iter().all(|a| a.element == Element::C));
+
+    let thr1_n = atoms.iter().find(|a| a.residue_name == "THR" && a.name == "N");
+    assert_eq!(thr1_n.map(|a| a.element), Some(Element::N));
+}

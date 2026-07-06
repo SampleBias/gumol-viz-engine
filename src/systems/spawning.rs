@@ -5,6 +5,7 @@
 use crate::core::atom::{Atom, Element};
 use crate::core::trajectory::FrameData;
 use crate::rendering;
+use crate::rendering::material_pool::MaterialPool;
 use bevy::prelude::*;
 use bevy_mod_picking::prelude::*;
 use std::collections::HashMap;
@@ -39,7 +40,7 @@ pub struct AtomsDespawnedEvent;
 fn spawn_atoms_from_frame_internal(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    material_pool: &MaterialPool,
     frame_data: &FrameData,
     atom_data: &[crate::core::atom::AtomData],
 ) -> HashMap<u32, Entity> {
@@ -47,7 +48,6 @@ fn spawn_atoms_from_frame_internal(
 
     let mut entity_map = HashMap::new();
     let mut mesh_cache: HashMap<Element, Handle<Mesh>> = HashMap::new();
-    let mut material_cache: HashMap<Element, Handle<StandardMaterial>> = HashMap::new();
 
     for atom_info in atom_data {
         if let Some(position) = frame_data.get_position(atom_info.id) {
@@ -59,18 +59,7 @@ fn spawn_atoms_from_frame_internal(
                 })
                 .clone();
 
-            let material = material_cache
-                .entry(atom_info.element)
-                .or_insert_with(|| {
-                    let color = atom_info.element.cpk_color();
-                    materials.add(StandardMaterial {
-                        base_color: Color::srgb(color[0], color[1], color[2]),
-                        metallic: 0.1,
-                        perceptual_roughness: 0.2,
-                        ..default()
-                    })
-                })
-                .clone();
+            let material = material_pool.get(atom_info.element);
 
             let entity = commands
                 .spawn((
@@ -103,10 +92,9 @@ fn spawn_atoms_from_frame_internal(
     }
 
     info!(
-        "Spawned {} atom entities ({} unique meshes, {} unique materials)",
+        "Spawned {} atom entities ({} unique meshes, material pool)",
         entity_map.len(),
         mesh_cache.len(),
-        material_cache.len()
     );
     entity_map
 }
@@ -136,7 +124,7 @@ pub fn despawn_all_atoms(
 pub fn spawn_atoms_on_load(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    material_pool: Res<MaterialPool>,
     sim_data: Res<crate::systems::loading::SimulationData>,
     mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
     mut atom_entities: ResMut<AtomEntities>,
@@ -154,12 +142,12 @@ pub fn spawn_atoms_on_load(
         info!("File loaded, spawning {} atoms", sim_data.atom_data.len());
 
         // Get the first frame
-        if let Some(first_frame) = sim_data.trajectory.get_frame(0) {
+        if let Some(first_frame) = sim_data.get_frame(0) {
             let new_entities = spawn_atoms_from_frame_internal(
                 &mut commands,
                 &mut meshes,
-                &mut materials,
-                first_frame,
+                &material_pool,
+                &first_frame,
                 &sim_data.atom_data,
             );
 
@@ -203,7 +191,7 @@ pub fn center_camera_on_file_load(
     }
 
     // Compute center from first frame (atoms may not be spawned yet)
-    let center = if let Some(frame) = sim_data.trajectory.get_frame(0) {
+    let center = if let Some(frame) = sim_data.get_frame(0) {
         let mut sum = Vec3::ZERO;
         let mut count = 0;
         for pos in frame.positions.values() {

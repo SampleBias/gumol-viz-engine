@@ -89,14 +89,14 @@ pub fn update_atom_positions_from_timeline(
 
     let current_frame = timeline.current_frame;
 
-    let current_frame_data = match sim_data.trajectory.get_frame(current_frame) {
+    let current_frame_data = match sim_data.get_frame(current_frame) {
         Some(frame) => frame,
         None => return,
     };
 
     let next_frame_data = if timeline.interpolate && timeline.interpolation_factor > 0.0 {
         let next_frame = (current_frame + 1).min(sim_data.num_frames() - 1);
-        sim_data.trajectory.get_frame(next_frame)
+        sim_data.get_frame(next_frame)
     } else {
         None
     };
@@ -106,7 +106,7 @@ pub fn update_atom_positions_from_timeline(
 
         let position = if let (Some(current), Some(next), Some(alpha)) = (
             current_frame_data.get_position(atom_id),
-            next_frame_data.and_then(|f| f.get_position(atom_id)),
+            next_frame_data.as_ref().and_then(|f| f.get_position(atom_id)),
             Some(timeline.interpolation_factor).filter(|_| timeline.interpolate),
         ) {
             current.lerp(next, alpha)

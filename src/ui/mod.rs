@@ -13,7 +13,8 @@ use crate::export::screenshot::RequestScreenshotEvent;
 use crate::io::FileFormat;
 use crate::performance::{memory, PerformanceDiagnostics};
 use crate::systems::loading::{
-    AsyncLoadState, CliFileArg, FileLoadErrorEvent, LoadFileEvent, SimulationData,
+    AsyncLoadState, CliFileArg, FileLoadErrorEvent, LoadFileEvent, LoadTopologyEvent,
+    SimulationData, TopologyState,
 };
 use crate::rendering::instanced::InstancedAtomEntities;
 use crate::systems::bonds::{BondEntities, BondDetectionConfig};
@@ -25,6 +26,12 @@ use bevy::ecs::system::SystemParam;
 use bevy::window::FileDragAndDrop;
 use crossbeam_channel;
 use std::path::Path;
+
+/// Resource holding receiver for async topology file picker results
+#[derive(Resource, Default)]
+pub struct TopologyPickerState {
+    receiver: Option<crossbeam_channel::Receiver<Option<std::path::PathBuf>>>,
+}
 
 /// Supported molecular file extensions for filtering
 const SUPPORTED_EXTENSIONS: &[&str] = &["xyz", "pdb", "gro", "dcd", "cif", "mmcif", "mcif"];
@@ -81,6 +88,31 @@ fn is_loadable_molecular_file(path: &Path) -> bool {
             LOADABLE_EXTENSIONS.iter().any(|e| *e == ext_lower)
         })
         .unwrap_or(false)
+}
+
+/// Topology file extensions (structure files for DCD pairing)
+const TOPOLOGY_EXTENSIONS: &[&str] = &["pdb", "gro", "cif", "mmcif", "mcif"];
+
+/// Poll for topology file picker result
+pub fn topology_picker_poll(
+    mut picker_state: ResMut<TopologyPickerState>,
+    mut load_topology_events: EventWriter<LoadTopologyEvent>,
+) {
+    if let Some(receiver) = picker_state.receiver.take() {
+        match receiver.try_recv() {
+            Ok(Some(path)) => {
+                if path.exists() {
+                    info!("Loading topology from dialog: {:?}", path);
+                    load_topology_events.send(LoadTopologyEvent { path });
+                }
+            }
+            Ok(None) => {}
+            Err(crossbeam_channel::TryRecvError::Empty) => {
+                picker_state.receiver = Some(receiver);
+            }
+            Err(crossbeam_channel::TryRecvError::Disconnected) => {}
+        }
+    }
 }
 
 /// Handle files dropped onto window
@@ -196,10 +228,17 @@ pub fn export_gltf_save_poll(
     }
 }
 
+#[derive(SystemParam)]
+pub struct TopologyUiState<'w> {
+    pub topology_state: Res<'w, TopologyState>,
+    pub topology_picker: ResMut<'w, TopologyPickerState>,
+}
+
 /// Main UI panel: status, Open button, controls, error display
 pub fn main_ui_panel(
     mut contexts: bevy_egui::EguiContexts,
     sim_data: Res<SimulationData>,
+    mut topology_ui: TopologyUiState,
     instanced_entities: Res<InstancedAtomEntities>,
     async_load: Res<AsyncLoadState>,
     perf_diag: Res<PerformanceDiagnostics>,
@@ -289,6 +328,40 @@ pub fn main_ui_panel(
                                 .color(bevy_egui::egui::Color32::from_rgb(220, 140, 50)),
                         );
                     }
+                }
+                if sim_data.needs_topology {
+                    ui.separator();
+                    ui.label(
+                        bevy_egui::egui::RichText::new(
+                            "⚠ DCD loaded without topology — element colors are placeholders",
+                        )
+                        .color(bevy_egui::egui::Color32::from_rgb(220, 140, 50)),
+                    );
+                    let topo_pending = topology_ui.topology_picker.receiver.is_some();
+                    if ui
+                        .add_enabled(
+                            !topo_pending,
+                            bevy_egui::egui::Button::new("Load topology (PDB/GRO/mmCIF)..."),
+                        )
+                        .clicked()
+                    {
+                        let (tx, rx) = crossbeam_channel::unbounded();
+                        topology_ui.topology_picker.receiver = Some(rx);
+                        std::thread::spawn(move || {
+                            let result = rfd::FileDialog::new()
+                                .add_filter("Topology files", TOPOLOGY_EXTENSIONS)
+                                .pick_file();
+                            let _ = tx.send(result);
+                        });
+                    }
+                    if topo_pending {
+                        ui.label(bevy_egui::egui::RichText::new("Opening topology dialog...").italics());
+                    }
+                } else if topology_ui.topology_state.path.is_some() {
+                    ui.label(format!(
+                        "  Topology: {}",
+                        topology_ui.topology_state.path.as_ref().unwrap().display()
+                    ));
                 }
                 ui.label(format!(
                     "  Visible/Culled: {}/{}  LOD: {}",
@@ -689,6 +762,7 @@ pub fn register(app: &mut App) {
     notifications::register(app);
 
     app.init_resource::<FilePickerState>()
+        .init_resource::<TopologyPickerState>()
         .init_resource::<ScreenshotSaveState>()
         .init_resource::<ObjSaveState>()
         .init_resource::<GltfSaveState>()
@@ -697,6 +771,7 @@ pub fn register(app: &mut App) {
             (
                 file_drop_handler,
                 file_picker_poll,
+                topology_picker_poll,
                 screenshot_save_poll,
                 export_obj_save_poll,
                 export_gltf_save_poll,

@@ -37,6 +37,8 @@ pub fn register(app: &mut App) {
             (
                 loading::handle_load_file_events,
                 loading::poll_async_load,
+                loading::handle_load_topology_events,
+                loading::track_topology_requirement,
                 loading::print_simulation_data,
                 timeline::handle_timeline_input,
             ),

@@ -20,7 +20,12 @@ pub fn estimate_simulation_bytes(sim_data: &SimulationData) -> u64 {
     let atoms = sim_data.num_atoms() as u64;
     let frames = sim_data.num_frames() as u64;
 
-    let trajectory_bytes = atoms * frames * BYTES_PER_ATOM_PER_FRAME;
+    // Streaming trajectories keep only metadata + one frame hot in practice.
+    let trajectory_bytes = if sim_data.is_streaming() {
+        atoms * BYTES_PER_ATOM_PER_FRAME
+    } else {
+        atoms * frames * BYTES_PER_ATOM_PER_FRAME
+    };
     let metadata_bytes = atoms * BYTES_PER_ATOM_METADATA;
     let bond_bytes = sim_data.bond_data.len() as u64 * 64;
 

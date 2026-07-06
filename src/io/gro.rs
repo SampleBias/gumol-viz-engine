@@ -175,6 +175,45 @@ impl GroParser {
         Ok(trajectory)
     }
 
+    /// Extract atom metadata from the first frame of a GRO file (topology for DCD pairing).
+    pub fn parse_topology(path: &Path) -> IOResult<(Vec<AtomData>, Vec<crate::core::bond::BondData>)> {
+        let trajectory = Self::parse_file(path)?;
+        let mut atom_data = Vec::with_capacity(trajectory.num_atoms);
+
+        if trajectory.file_path.exists() {
+            let file = std::fs::File::open(&trajectory.file_path)?;
+            let reader = BufReader::new(file);
+            let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
+
+            if lines.len() >= 3 {
+                for (i, line) in lines.iter().skip(2).take(trajectory.num_atoms).enumerate() {
+                    let parsed = Self::parse_atom_line(line, i + 3, i)?;
+                    atom_data.push(AtomData::new(
+                        i as u32,
+                        parsed.element,
+                        parsed.residue_id as u32,
+                        parsed.residue_name,
+                        "A".to_string(),
+                        parsed.atom_name,
+                    ));
+                }
+            }
+        }
+
+        if atom_data.len() != trajectory.num_atoms {
+            return Err(IOError::ParseError {
+                line: 0,
+                message: format!(
+                    "Expected {} GRO topology atoms, parsed {}",
+                    trajectory.num_atoms,
+                    atom_data.len()
+                ),
+            });
+        }
+
+        Ok((atom_data, Vec::new()))
+    }
+
     /// Parse a single atom line from GRO format
     pub fn parse_atom_line(line: &str, line_num: usize, atom_id: usize) -> IOResult<ParsedAtom> {
         // GRO is fixed-width; do not trim leading columns.

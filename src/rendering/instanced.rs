@@ -27,9 +27,9 @@ use bevy::render::{
         RenderCommandResult, SetItemPipeline, TrackedRenderPass, ViewSortedRenderPhases,
     },
     render_resource::*,
-    renderer::RenderDevice,
+    renderer::{RenderDevice, RenderQueue},
     view::{ExtractedView, NoFrustumCulling},
-    Render, RenderApp, RenderSet,
+    MainWorld, Render, RenderApp, RenderSet,
 };
 use bytemuck::{Pod, Zeroable};
 use std::collections::HashMap;
@@ -47,17 +47,46 @@ pub struct AtomInstanceData {
     pub color: Vec4,
 }
 
+/// Maximum draw calls for instanced atom rendering (one per periodic-table element).
+pub const MAX_INSTANCED_DRAW_CALLS: usize = 118;
+
+/// Estimate instanced draw calls from atom data (unique elements present).
+pub fn estimate_instanced_draw_calls(atom_data: &[AtomData]) -> usize {
+    use std::collections::HashSet;
+    atom_data
+        .iter()
+        .map(|a| a.element)
+        .collect::<HashSet<_>>()
+        .len()
+}
+
 // ============================================================================
 // APP-WORLD COMPONENTS / RESOURCES / EVENTS
 // ============================================================================
 
 /// Holds all instance data for one element.  Extracted to the render world
-/// each frame so the GPU buffer can be rebuilt when positions change.
+/// when `gpu_dirty` is set so the GPU buffer can be updated incrementally.
 #[derive(Component, Clone, Debug)]
 pub struct InstancedAtomMesh {
     pub instances: Vec<AtomInstanceData>,
     /// Cached visualization scale (before frustum culling).
     pub mode_scale: f32,
+    /// When true, instance data must be re-uploaded to the GPU.
+    pub gpu_dirty: bool,
+}
+
+impl InstancedAtomMesh {
+    pub fn new(instances: Vec<AtomInstanceData>, mode_scale: f32) -> Self {
+        Self {
+            instances,
+            mode_scale,
+            gpu_dirty: true,
+        }
+    }
+
+    pub fn mark_gpu_dirty(&mut self) {
+        self.gpu_dirty = true;
+    }
 }
 
 impl ExtractComponent for InstancedAtomMesh {
@@ -66,9 +95,13 @@ impl ExtractComponent for InstancedAtomMesh {
     type Out = Self;
 
     fn extract_component(item: QueryItem<'_, Self::QueryData>) -> Option<Self> {
+        if !item.gpu_dirty {
+            return None;
+        }
         Some(InstancedAtomMesh {
             instances: item.instances.clone(),
             mode_scale: item.mode_scale,
+            gpu_dirty: false,
         })
     }
 }
@@ -156,10 +189,7 @@ pub fn spawn_atoms_instanced_internal(
             .spawn((
                 mesh,
                 SpatialBundle::INHERITED_IDENTITY,
-                InstancedAtomMesh {
-                    instances,
-                    mode_scale: instance_scale,
-                },
+                InstancedAtomMesh::new(instances, instance_scale),
                 InstancedAtomEntity { element: *element },
                 NoFrustumCulling,
             ))
@@ -186,6 +216,7 @@ pub fn spawn_instanced_atoms_on_load(
     sim_data: Res<crate::systems::loading::SimulationData>,
     viz_config: Res<VisualizationConfig>,
     mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    mut topology_events: EventReader<crate::systems::loading::TopologyAppliedEvent>,
     mut instanced_entities: ResMut<InstancedAtomEntities>,
     mut atom_index: ResMut<InstancedAtomIndex>,
     mut mesh_pool: ResMut<AtomMeshPool>,
@@ -194,19 +225,20 @@ pub fn spawn_instanced_atoms_on_load(
     mut diagnostics: ResMut<crate::performance::PerformanceDiagnostics>,
     mut spawned_event: EventWriter<InstancedAtomsSpawnedEvent>,
 ) {
-    if !instanced_entities.entities.is_empty() {
-        return;
-    }
+    let file_loaded = file_loaded_events.read().next().is_some();
+    let topology_applied = topology_events.read().next().is_some();
+    let should_spawn = (file_loaded || topology_applied)
+        && sim_data.loaded
+        && !sim_data.atom_data.is_empty()
+        && (instanced_entities.entities.is_empty() || topology_applied);
 
-    let should_spawn = file_loaded_events.read().next().is_some();
-
-    if should_spawn && sim_data.loaded && !sim_data.atom_data.is_empty() {
-        if let Some(first_frame) = sim_data.trajectory.get_frame(0) {
+    if should_spawn {
+        if let Some(first_frame) = sim_data.get_frame(0) {
             let (new_entities, ids_by_element) = spawn_atoms_instanced_internal(
                 &mut commands,
                 &mut meshes,
                 &mut mesh_pool,
-                first_frame,
+                &first_frame,
                 &sim_data.atom_data,
                 &viz_config,
             );
@@ -261,9 +293,11 @@ pub fn clear_instanced_atoms_on_load(
     mut atom_index: ResMut<InstancedAtomIndex>,
     mut mesh_pool: ResMut<AtomMeshPool>,
     mut pick_entities: ResMut<crate::interaction::pick_proxy::PickProxyEntities>,
-    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    mut topology_events: EventReader<crate::systems::loading::TopologyAppliedEvent>,
 ) {
-    if !file_loaded_events.is_empty() {
+    let reload = !file_loaded_events.is_empty() || !topology_events.is_empty();
+    if reload {
         mesh_pool.clear();
         if !pick_entities.entities.is_empty() {
             for (_, entity) in pick_entities.entities.drain() {
@@ -292,7 +326,7 @@ pub fn center_camera_on_file_load_instanced(
         return;
     }
 
-    if let Some(frame) = sim_data.trajectory.get_frame(0) {
+    if let Some(frame) = sim_data.get_frame(0) {
         let mut sum = Vec3::ZERO;
         let mut count = 0;
         for pos in frame.positions.values() {
@@ -321,14 +355,14 @@ pub fn update_instanced_positions_from_timeline(
         return;
     }
 
-    let current_frame = match sim_data.trajectory.get_frame(timeline.current_frame) {
+    let current_frame = match sim_data.get_frame(timeline.current_frame) {
         Some(f) => f,
         None => return,
     };
 
     let next_frame = if timeline.interpolate && timeline.interpolation_factor > 0.0 {
         let next_idx = (timeline.current_frame + 1).min(sim_data.num_frames() - 1);
-        sim_data.trajectory.get_frame(next_idx)
+        sim_data.get_frame(next_idx)
     } else {
         None
     };
@@ -350,7 +384,7 @@ pub fn update_instanced_positions_from_timeline(
                 None => continue,
             };
 
-            let position = if let Some(nf) = next_frame {
+            let position = if let Some(ref nf) = next_frame {
                 if let Some(next_pos) = nf.get_position(atom_id) {
                     current_pos.lerp(next_pos, timeline.interpolation_factor)
                 } else {
@@ -362,6 +396,7 @@ pub fn update_instanced_positions_from_timeline(
 
             mesh.instances[i].position = position;
         }
+        mesh.mark_gpu_dirty();
     }
 }
 
@@ -383,6 +418,7 @@ pub fn update_instanced_visualization(
         for instance in mesh.instances.iter_mut() {
             instance.scale = instance_scale;
         }
+        mesh.mark_gpu_dirty();
     }
 }
 
@@ -422,6 +458,7 @@ pub fn update_instanced_selection_highlight(
                 mesh.instances[i].color = Vec4::new(cpk[0], cpk[1], cpk[2], 1.0);
             }
         }
+        mesh.mark_gpu_dirty();
     }
 }
 
@@ -436,6 +473,7 @@ impl Plugin for InstancedAtomRenderPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(ExtractComponentPlugin::<InstancedAtomMesh>::default());
         app.sub_app_mut(RenderApp)
+            .add_systems(ExtractSchedule, clear_instanced_gpu_dirty)
             .add_render_command::<Transparent3d, DrawInstancedAtoms>()
             .init_resource::<SpecializedMeshPipelines<InstancedAtomPipeline>>()
             .add_systems(
@@ -567,6 +605,16 @@ fn queue_instanced_atoms(
     }
 }
 
+// --- Clear dirty flags after extract ---
+
+fn clear_instanced_gpu_dirty(mut main_world: ResMut<MainWorld>) {
+    let world = main_world.as_mut();
+    let mut query = world.query::<&mut InstancedAtomMesh>();
+    for mut mesh in query.iter_mut(world) {
+        mesh.gpu_dirty = false;
+    }
+}
+
 // --- Prepare GPU buffers ---
 
 #[derive(Component)]
@@ -577,24 +625,33 @@ struct InstanceBuffer {
 
 fn prepare_instance_buffers(
     mut commands: Commands,
-    query: Query<(Entity, &InstancedAtomMesh)>,
+    query: Query<(Entity, &InstancedAtomMesh), Changed<InstancedAtomMesh>>,
+    existing: Query<&InstanceBuffer>,
     render_device: Res<RenderDevice>,
+    render_queue: Res<RenderQueue>,
 ) {
     for (entity, instance_data) in &query {
         if instance_data.instances.is_empty() {
             continue;
         }
 
+        let bytes = bytemuck::cast_slice(&instance_data.instances);
+        let length = instance_data.instances.len();
+
+        if let Ok(existing_buffer) = existing.get(entity) {
+            if existing_buffer.length == length {
+                render_queue.write_buffer(&existing_buffer.buffer, 0, bytes);
+                continue;
+            }
+        }
+
         let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
             label: Some("instanced_atom_buffer"),
-            contents: bytemuck::cast_slice(&instance_data.instances),
+            contents: bytes,
             usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
         });
 
-        commands.entity(entity).insert(InstanceBuffer {
-            buffer,
-            length: instance_data.instances.len(),
-        });
+        commands.entity(entity).insert(InstanceBuffer { buffer, length });
     }
 }
 
@@ -681,6 +738,7 @@ pub fn register(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::atom::AtomData;
 
     #[test]
     fn test_atom_instance_data_size() {
@@ -711,20 +769,33 @@ mod tests {
     }
 
     #[test]
-    fn test_bytemuck_cast() {
-        let instances = vec![
-            AtomInstanceData {
-                position: Vec3::ZERO,
-                scale: 1.0,
-                color: Vec4::ONE,
-            },
-            AtomInstanceData {
-                position: Vec3::X,
-                scale: 2.0,
-                color: Vec4::ZERO,
-            },
-        ];
-        let bytes: &[u8] = bytemuck::cast_slice(&instances);
-        assert_eq!(bytes.len(), 64);
+    fn test_estimate_draw_calls_bounded() {
+        let atoms: Vec<AtomData> = (0..100_000)
+            .map(|i| {
+                AtomData::new(
+                    i,
+                    if i % 3 == 0 {
+                        Element::C
+                    } else if i % 3 == 1 {
+                        Element::H
+                    } else {
+                        Element::O
+                    },
+                    0,
+                    "UNK".into(),
+                    "A".into(),
+                    format!("A{i}"),
+                )
+            })
+            .collect();
+        let draw_calls = estimate_instanced_draw_calls(&atoms);
+        assert_eq!(draw_calls, 3);
+        assert!(draw_calls <= MAX_INSTANCED_DRAW_CALLS);
+    }
+
+    #[test]
+    fn test_instanced_atom_mesh_dirty_flag() {
+        let mesh = InstancedAtomMesh::new(vec![], 1.0);
+        assert!(mesh.gpu_dirty);
     }
 }

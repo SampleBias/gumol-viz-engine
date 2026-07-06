@@ -4,9 +4,10 @@
 //! the parsed data in Bevy resources.
 
 use crate::core::atom::AtomData;
-use crate::core::trajectory::Trajectory;
+use crate::core::trajectory::{FrameData, Trajectory};
 use crate::core::atom::Element;
-use crate::io::{FileFormat, IOResult};
+use crate::io::streaming::{self, FrameProvider};
+use crate::io::{load_topology, FileFormat, IOResult};
 use crate::io::xyz::XYZParser;
 use crate::io::pdb::PDBParser;
 use crate::io::gro::GroParser;
@@ -15,27 +16,34 @@ use bevy::prelude::*;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// Resource containing the loaded simulation data
-#[derive(Resource, Clone, Debug)]
+#[derive(Resource, Clone)]
 pub struct SimulationData {
-    /// The trajectory data
+    /// Trajectory metadata and in-memory frames (empty when streaming)
     pub trajectory: Trajectory,
+    /// On-demand frame access for large trajectories
+    frame_provider: Option<Arc<dyn FrameProvider>>,
     /// Atom metadata (static data that doesn't change between frames)
     pub atom_data: Vec<AtomData>,
     /// Bond topology from file (e.g. PDB CONECT) or empty for distance detection
     pub bond_data: Vec<crate::core::bond::BondData>,
     /// Whether data is loaded
     pub loaded: bool,
+    /// DCD loaded without topology — atom metadata is placeholder until topology applied
+    pub needs_topology: bool,
 }
 
 impl Default for SimulationData {
     fn default() -> Self {
         Self {
             trajectory: Trajectory::new(PathBuf::new(), 0, 1.0),
+            frame_provider: None,
             atom_data: Vec::new(),
             bond_data: Vec::new(),
             loaded: false,
+            needs_topology: false,
         }
     }
 }
@@ -45,30 +53,82 @@ impl SimulationData {
     pub fn new(trajectory: Trajectory, atom_data: Vec<AtomData>) -> Self {
         Self {
             trajectory,
+            frame_provider: None,
             atom_data,
             bond_data: Vec::new(),
             loaded: true,
+            needs_topology: false,
         }
     }
 
     /// Create simulation data with explicit bond topology
-    pub fn with_bonds(trajectory: Trajectory, atom_data: Vec<AtomData>, bond_data: Vec<crate::core::bond::BondData>) -> Self {
+    pub fn with_bonds(
+        trajectory: Trajectory,
+        atom_data: Vec<AtomData>,
+        bond_data: Vec<crate::core::bond::BondData>,
+    ) -> Self {
         Self {
             trajectory,
+            frame_provider: None,
             atom_data,
             bond_data,
             loaded: true,
+            needs_topology: false,
         }
+    }
+
+    /// Attach a streaming frame provider (trajectory.frames may be empty).
+    pub fn with_frame_provider(
+        mut self,
+        provider: Arc<dyn FrameProvider>,
+    ) -> Self {
+        self.frame_provider = Some(provider);
+        self
+    }
+
+    /// Get a trajectory frame (from memory or streaming provider).
+    pub fn get_frame(&self, index: usize) -> Option<FrameData> {
+        if let Some(provider) = &self.frame_provider {
+            provider.get_frame(index).ok()
+        } else {
+            self.trajectory.get_frame(index).cloned()
+        }
+    }
+
+    /// Apply topology metadata to a DCD trajectory already loaded with placeholders.
+    pub fn apply_topology(
+        &mut self,
+        atom_data: Vec<AtomData>,
+        bond_data: Vec<crate::core::bond::BondData>,
+    ) -> Result<(), String> {
+        crate::io::topology::validate_atom_count(atom_data.len(), self.num_atoms())?;
+        self.atom_data = atom_data;
+        self.bond_data = bond_data;
+        self.needs_topology = false;
+        Ok(())
     }
 
     /// Get the number of atoms in the simulation
     pub fn num_atoms(&self) -> usize {
-        self.trajectory.num_atoms
+        if self.trajectory.num_atoms > 0 {
+            self.trajectory.num_atoms
+        } else {
+            self.atom_data.len()
+        }
     }
 
     /// Get the number of frames in the trajectory
     pub fn num_frames(&self) -> usize {
-        self.trajectory.num_frames()
+        if let Some(provider) = &self.frame_provider {
+            provider.num_frames()
+        } else {
+            self.trajectory.num_frames()
+        }
+    }
+
+    /// Whether frames are loaded on demand from disk (large DCD).
+    pub fn is_streaming(&self) -> bool {
+        self.frame_provider.is_some()
     }
 
     /// Get the total simulation time
@@ -78,7 +138,7 @@ impl SimulationData {
 
     /// Contiguous positions for all `atom_data` entries in frame order (cache-friendly SoA).
     pub fn frame_positions_dense(&self, frame_idx: usize) -> Option<Vec<Vec3>> {
-        let frame = self.trajectory.get_frame(frame_idx)?;
+        let frame = self.get_frame(frame_idx)?;
         Some(
             self.atom_data
                 .iter()
@@ -116,6 +176,30 @@ impl FileHandle {
 #[derive(Resource, Default, Debug)]
 pub struct CliFileArg(pub Option<PathBuf>);
 
+/// Resource holding CLI topology path from startup args (pairs with DCD)
+#[derive(Resource, Default, Debug)]
+pub struct CliTopologyArg(pub Option<PathBuf>);
+
+/// Tracks topology file state for DCD trajectories
+#[derive(Resource, Default, Debug)]
+pub struct TopologyState {
+    pub path: Option<PathBuf>,
+    pub pending_dcd: Option<PathBuf>,
+}
+
+/// Event sent when a topology file should be loaded and applied
+#[derive(Event, Debug)]
+pub struct LoadTopologyEvent {
+    pub path: PathBuf,
+}
+
+/// Event sent after topology is applied to a DCD trajectory
+#[derive(Event, Debug)]
+pub struct TopologyAppliedEvent {
+    pub topology_path: PathBuf,
+    pub num_atoms: usize,
+}
+
 /// Event sent when a file is requested to be loaded
 #[derive(Event, Debug)]
 pub struct LoadFileEvent {
@@ -144,7 +228,10 @@ pub struct FileLoadErrorEvent {
 }
 
 /// Load a file based on its format
-fn load_file(path: &Path) -> IOResult<(Trajectory, Vec<AtomData>, Vec<crate::core::bond::BondData>)> {
+fn load_file(
+    path: &Path,
+    topology_path: Option<&Path>,
+) -> IOResult<(Trajectory, Vec<AtomData>, Vec<crate::core::bond::BondData>, Option<Arc<dyn FrameProvider>>, bool)> {
     let format = FileFormat::from_path(path);
 
     info!("Loading file: {:?} (format: {:?})", path, format);
@@ -153,26 +240,34 @@ fn load_file(path: &Path) -> IOResult<(Trajectory, Vec<AtomData>, Vec<crate::cor
         FileFormat::XYZ => {
             let trajectory = XYZParser::parse_file(path)?;
             let atom_data = create_atom_data_from_xyz(&trajectory)?;
-            Ok((trajectory, atom_data, Vec::new()))
+            Ok((trajectory, atom_data, Vec::new(), None, false))
         }
         FileFormat::PDB => {
             let (trajectory, atom_data, bond_data) = PDBParser::parse_file_with_atoms(path)?;
-            Ok((trajectory, atom_data, bond_data))
+            Ok((trajectory, atom_data, bond_data, None, false))
         }
         FileFormat::GRO => {
             let trajectory = GroParser::parse_file(path)?;
             let atom_data = create_atom_data_from_gro(&trajectory)?;
-            Ok((trajectory, atom_data, Vec::new()))
+            Ok((trajectory, atom_data, Vec::new(), None, false))
         }
         FileFormat::MmCIF => {
             let trajectory = MmcifParser::parse_file(path)?;
             let atom_data = create_atom_data_from_mmcif(&trajectory)?;
-            Ok((trajectory, atom_data, Vec::new()))
+            Ok((trajectory, atom_data, Vec::new(), None, false))
         }
         FileFormat::DCD => {
-            let trajectory = crate::io::dcd::DcdParser::parse_file(path)?;
-            let atom_data = create_placeholder_atom_data(&trajectory)?;
-            Ok((trajectory, atom_data, Vec::new()))
+            let (trajectory, frame_provider) = streaming::open_dcd(path)?;
+
+            if let Some(topo_path) = topology_path {
+                let (atom_data, bond_data) = load_topology(topo_path)?;
+                crate::io::topology::validate_atom_count(atom_data.len(), trajectory.num_atoms)
+                    .map_err(|e| crate::io::IOError::InvalidFormat(e))?;
+                Ok((trajectory, atom_data, bond_data, frame_provider, false))
+            } else {
+                let atom_data = create_placeholder_atom_data(&trajectory)?;
+                Ok((trajectory, atom_data, Vec::new(), frame_provider, true))
+            }
         }
         _ => Err(crate::io::IOError::UnsupportedFormat(format!("{:?}", format))),
     }
@@ -303,25 +398,46 @@ fn create_atom_data_from_mmcif(trajectory: &Trajectory) -> IOResult<Vec<AtomData
 /// Create placeholder atom data (for formats without atom metadata)
 fn create_placeholder_atom_data(trajectory: &Trajectory) -> IOResult<Vec<AtomData>> {
     let mut atom_data = Vec::new();
+    let count = trajectory.num_atoms;
 
-    if let Some(first_frame) = trajectory.get_frame(0) {
-        for atom_id in first_frame.atom_ids() {
-            atom_data.push(AtomData::new(
-                *atom_id,
-                Element::Unknown,
-                0,
-                "UNK".to_string(),
-                "A".to_string(),
-                format!("ATOM{}", atom_id),
-            ));
-        }
+    for atom_id in 0..count {
+        atom_data.push(AtomData::new(
+            atom_id as u32,
+            Element::Unknown,
+            0,
+            "UNK".to_string(),
+            "A".to_string(),
+            format!("ATOM{atom_id}"),
+        ));
     }
 
     Ok(atom_data)
 }
 
+fn apply_load_result(
+    sim_data: &mut SimulationData,
+    trajectory: Trajectory,
+    atom_data: Vec<AtomData>,
+    bond_data: Vec<crate::core::bond::BondData>,
+    frame_provider: Option<Arc<dyn FrameProvider>>,
+    needs_topology: bool,
+) {
+    sim_data.trajectory = trajectory;
+    sim_data.frame_provider = frame_provider;
+    sim_data.atom_data = atom_data;
+    sim_data.bond_data = bond_data;
+    sim_data.loaded = true;
+    sim_data.needs_topology = needs_topology;
+}
+
 /// Result of a background file load.
-type LoadResult = (Trajectory, Vec<AtomData>, Vec<crate::core::bond::BondData>);
+type LoadResult = (
+    Trajectory,
+    Vec<AtomData>,
+    Vec<crate::core::bond::BondData>,
+    Option<Arc<dyn FrameProvider>>,
+    bool,
+);
 
 /// Tracks an in-flight async file load.
 #[derive(Resource, Default)]
@@ -335,6 +451,7 @@ pub struct AsyncLoadState {
 pub fn handle_load_file_events(
     mut load_events: EventReader<LoadFileEvent>,
     mut async_state: ResMut<AsyncLoadState>,
+    cli_topology: Res<CliTopologyArg>,
 ) {
     if load_events.is_empty() || async_state.in_progress {
         return;
@@ -344,13 +461,14 @@ pub fn handle_load_file_events(
         info!("Queueing async load: {:?}", event.path);
 
         let path = event.path.clone();
+        let topology = cli_topology.0.clone();
         let (tx, rx) = crossbeam_channel::unbounded();
         async_state.receiver = Some(rx);
         async_state.pending_path = Some(path.clone());
         async_state.in_progress = true;
 
         std::thread::spawn(move || {
-            let result = load_file(&path).map_err(|e| e.to_string());
+            let result = load_file(&path, topology.as_deref()).map_err(|e| e.to_string());
             let _ = tx.send(result);
         });
         break;
@@ -371,18 +489,27 @@ pub fn poll_async_load(
     };
 
     match receiver.try_recv() {
-        Ok(Ok((trajectory, atom_data, bond_data))) => {
+        Ok(Ok((trajectory, atom_data, bond_data, frame_provider, needs_topology))) => {
             let path = async_state.pending_path.take().unwrap_or_default();
             info!(
-                "Async load complete: {} atoms, {} frames",
+                "Async load complete: {} atoms, {} frames{}",
                 atom_data.len(),
-                trajectory.num_frames()
+                if frame_provider.is_some() {
+                    frame_provider.as_ref().map(|p| p.num_frames()).unwrap_or(0)
+                } else {
+                    trajectory.num_frames()
+                },
+                if needs_topology { " (needs topology)" } else { "" }
             );
 
-            sim_data.trajectory = trajectory.clone();
-            sim_data.atom_data = atom_data.clone();
-            sim_data.bond_data = bond_data;
-            sim_data.loaded = true;
+            apply_load_result(
+                &mut sim_data,
+                trajectory.clone(),
+                atom_data.clone(),
+                bond_data,
+                frame_provider,
+                needs_topology,
+            );
 
             let format = FileFormat::from_path(&path);
             commands.insert_resource(FileHandle::new(path.clone(), format));
@@ -395,7 +522,7 @@ pub fn poll_async_load(
             load_success.send(FileLoadedEvent {
                 path,
                 num_atoms: atom_data.len(),
-                num_frames: trajectory.num_frames(),
+                num_frames: sim_data.num_frames(),
             });
 
             async_state.in_progress = false;
@@ -433,19 +560,27 @@ pub fn handle_load_file_events_sync(
         info!("Received load file event: {:?}", event.path);
 
         // Attempt to load the file
-        match load_file(&event.path) {
-            Ok((trajectory, atom_data, bond_data)) => {
+        match load_file(&event.path, None) {
+            Ok((trajectory, atom_data, bond_data, frame_provider, needs_topology)) => {
                 info!(
                     "Successfully loaded file: {} atoms, {} frames, {} bonds",
                     atom_data.len(),
-                    trajectory.num_frames(),
+                    if frame_provider.is_some() {
+                        frame_provider.as_ref().map(|p| p.num_frames()).unwrap_or(0)
+                    } else {
+                        trajectory.num_frames()
+                    },
                     bond_data.len()
                 );
 
-                sim_data.trajectory = trajectory.clone();
-                sim_data.atom_data = atom_data.clone();
-                sim_data.bond_data = bond_data;
-                sim_data.loaded = true;
+                apply_load_result(
+                    &mut sim_data,
+                    trajectory.clone(),
+                    atom_data.clone(),
+                    bond_data,
+                    frame_provider,
+                    needs_topology,
+                );
 
                 // Update file handle - handle resource outside of event loop
                 let format = FileFormat::from_path(&event.path);
@@ -464,7 +599,7 @@ pub fn handle_load_file_events_sync(
                 load_success.send(FileLoadedEvent {
                     path: event.path.clone(),
                     num_atoms: atom_data.len(),
-                    num_frames: trajectory.num_frames(),
+                    num_frames: sim_data.num_frames(),
                 });
             }
             Err(_e) => {
@@ -532,20 +667,104 @@ pub fn print_simulation_data(sim_data: Res<SimulationData>) {
     }
 }
 
+/// Apply topology file to the currently loaded DCD trajectory.
+pub fn handle_load_topology_events(
+    mut events: EventReader<LoadTopologyEvent>,
+    mut sim_data: ResMut<SimulationData>,
+    mut topology_state: ResMut<TopologyState>,
+    mut applied: EventWriter<TopologyAppliedEvent>,
+    mut load_error: EventWriter<FileLoadErrorEvent>,
+) {
+    for event in events.read() {
+        match load_topology(&event.path) {
+            Ok((atom_data, bond_data)) => {
+                match sim_data.apply_topology(atom_data.clone(), bond_data.clone()) {
+                    Ok(()) => {
+                        topology_state.path = Some(event.path.clone());
+                        applied.send(TopologyAppliedEvent {
+                            topology_path: event.path.clone(),
+                            num_atoms: atom_data.len(),
+                        });
+                        info!("Applied topology from {:?}", event.path);
+                    }
+                    Err(e) => {
+                        load_error.send(FileLoadErrorEvent {
+                            path: event.path.clone(),
+                            error: e,
+                        });
+                    }
+                }
+            }
+            Err(e) => {
+                load_error.send(FileLoadErrorEvent {
+                    path: event.path.clone(),
+                    error: e.to_string(),
+                });
+            }
+        }
+    }
+}
+
+/// Track DCD loads that still need a topology file.
+pub fn track_topology_requirement(
+    mut load_events: EventReader<FileLoadedEvent>,
+    file_handle: Option<Res<FileHandle>>,
+    mut topology_state: ResMut<TopologyState>,
+    sim_data: Res<SimulationData>,
+) {
+    for event in load_events.read() {
+        if sim_data.needs_topology {
+            if let Some(handle) = file_handle.as_ref() {
+                if handle.format == FileFormat::DCD {
+                    topology_state.pending_dcd = Some(event.path.clone());
+                }
+            }
+        }
+    }
+}
+
 /// Register loading resources and events. Systems are registered centrally in systems::register.
 pub fn register(app: &mut App) {
-    let cli_path = std::env::args()
-        .nth(1)
-        .map(PathBuf::from);
+    let (cli_path, cli_topology) = parse_cli_args();
 
     app.init_resource::<SimulationData>()
         .insert_resource(CliFileArg(cli_path))
+        .insert_resource(CliTopologyArg(cli_topology))
+        .init_resource::<TopologyState>()
         .init_resource::<AsyncLoadState>()
         .add_event::<LoadFileEvent>()
         .add_event::<FileLoadedEvent>()
-        .add_event::<FileLoadErrorEvent>();
+        .add_event::<FileLoadErrorEvent>()
+        .add_event::<LoadTopologyEvent>()
+        .add_event::<TopologyAppliedEvent>();
 
     info!("Loading resources registered");
+}
+
+/// Parse CLI arguments: `cargo run -- traj.dcd --topology struct.pdb`
+fn parse_cli_args() -> (Option<PathBuf>, Option<PathBuf>) {
+    let args: Vec<String> = std::env::args().collect();
+    let mut trajectory = None;
+    let mut topology = None;
+    let mut i = 1;
+
+    while i < args.len() {
+        match args[i].as_str() {
+            "--topology" | "-t" => {
+                i += 1;
+                if i < args.len() {
+                    topology = Some(PathBuf::from(&args[i]));
+                }
+            }
+            arg if !arg.starts_with('-') && trajectory.is_none() => {
+                trajectory = Some(PathBuf::from(arg));
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    (trajectory, topology)
 }
 
 #[cfg(test)]
@@ -567,6 +786,8 @@ mod tests {
 
         let pdb_content = "ATOM      1  N   ALA A   1       0.000   0.000   0.000";
         assert_eq!(FileFormat::from_content(pdb_content), FileFormat::PDB);
+
+        assert_eq!(FileFormat::from_bytes(&84_i32.to_le_bytes()), FileFormat::DCD);
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! DCD file format parser
 //!
 //! The DCD format is a binary trajectory format used by CHARMM, NAMD, and others.
-//! It's a fixed record-length binary file with a specific header and frame structure.
+//! Supports full load for small trajectories and seek-based streaming for large ones.
 
 use crate::core::trajectory::{FrameData, Trajectory, TrajectoryMetadata};
 use crate::core::atom::AtomData;
@@ -9,16 +9,14 @@ use crate::io::{IOError, IOResult};
 use bevy::prelude::*;
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::fs::File;
-use std::io::{BufReader, Read};
-use std::path::{Path, PathBuf};
+use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::path::Path;
 
 /// DCD format constants
-const DCD_MAGIC_NUMBER: i32 = 84;
-const DCD_HEADER_SIZE: usize = 224;
-const DCD_TITLE_SIZE: i32 = 80;
+pub const DCD_MAGIC_NUMBER: i32 = 84;
 
 /// DCD header structure
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DcdHeader {
     pub num_frames: i32,
     pub start_step: i32,
@@ -49,80 +47,83 @@ impl Default for DcdHeader {
     }
 }
 
-/// DCD format parser
-pub struct DcdParser;
+/// Seekable DCD reader for streaming frame access.
+pub struct DcdReader {
+    file: File,
+    header: DcdHeader,
+    first_frame_offset: u64,
+    frame_stride: u64,
+    time_step: f32,
+}
 
-impl DcdParser {
-    /// Parse a DCD file and return trajectory data
-    ///
-    /// Note: DCD files only contain position data (no atom metadata).
-    /// You'll need to load atom data from a separate file (e.g., PDB, GRO, mmCIF).
-    pub fn parse_file(path: &Path) -> IOResult<Trajectory> {
-        let file = File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
+impl DcdReader {
+    /// Open a DCD file and parse the header.
+    pub fn open(path: &Path) -> IOResult<Self> {
+        let file = File::open(path)
+            .map_err(|_| IOError::FileNotFound(path.display().to_string()))?;
         let mut reader = BufReader::new(file);
-        Self::parse_reader(&mut reader, path.to_path_buf())
+        let (header, first_frame_offset) = Self::read_header(&mut reader)?;
+        let frame_stride = Self::frame_stride(header.num_atoms as usize);
+        let time_step = header.delta * 20.0;
+
+        let file = reader.into_inner();
+
+        Ok(Self {
+            file,
+            header,
+            first_frame_offset,
+            frame_stride,
+            time_step,
+        })
     }
 
-    /// Parse DCD format from a binary reader
-    pub fn parse_reader<R: Read>(reader: &mut R, file_path: PathBuf) -> IOResult<Trajectory> {
-        let header = Self::read_header(reader)?;
+    pub fn header(&self) -> &DcdHeader {
+        &self.header
+    }
 
-        let num_atoms = header.num_atoms as usize;
-        let num_frames = if header.num_frames > 0 {
-            header.num_frames as usize
+    pub fn num_frames(&self) -> usize {
+        if self.header.num_frames > 0 {
+            self.header.num_frames as usize
         } else {
-            // 0 means read until EOF - we don't support that yet, use 1 as fallback
             1
-        };
-
-        info!(
-            "DCD: {} frames, {} atoms",
-            num_frames,
-            num_atoms
-        );
-
-        let mut frames = Vec::new();
-        for frame_index in 0..num_frames {
-            let frame = Self::read_frame(reader, frame_index, num_atoms)?;
-            frames.push(frame);
         }
-
-        let mut metadata = TrajectoryMetadata::default();
-        metadata.title = header.title.clone();
-        metadata.software = if header.charmm {
-            "CHARMM".to_string()
-        } else {
-            "Unknown".to_string()
-        };
-        metadata.num_steps = Some(header.num_sets as u64);
-        metadata.step_size = Some(header.delta);
-
-        let time_step = header.delta * 20.0; // Convert to femtoseconds (DCD uses 20fs units by default)
-
-        let mut trajectory = Trajectory::new(file_path, num_atoms, time_step);
-        trajectory.metadata = metadata;
-        for frame in frames {
-            trajectory.add_frame(frame);
-        }
-
-        Ok(trajectory)
     }
 
-    /// Parse DCD format from file path with atom data
-    ///
-    /// This helper function allows you to combine DCD trajectory data with atom metadata
-    /// from a separate file (e.g., PDB, GRO, mmCIF).
-    pub fn parse_with_atom_data(
-        path: &Path,
-        _atom_data: &[AtomData],
-    ) -> IOResult<Trajectory> {
-        Self::parse_file(path)
+    pub fn num_atoms(&self) -> usize {
+        self.header.num_atoms as usize
     }
 
-    /// Read DCD header (Fortran unformatted format)
-    fn read_header<R: Read>(reader: &mut R) -> IOResult<DcdHeader> {
-        // First record: 4-byte size (84) + 84 bytes + 4-byte size
+    pub fn time_step(&self) -> f32 {
+        self.time_step
+    }
+
+    /// Read a single frame by index (0-based).
+    pub fn read_frame(&self, frame_index: usize) -> IOResult<FrameData> {
+        let offset = self
+            .first_frame_offset
+            .saturating_add(self.frame_stride.saturating_mul(frame_index as u64));
+        let mut file = &self.file;
+        file.seek(SeekFrom::Start(offset))?;
+        Self::read_frame_at(
+            &mut file,
+            frame_index,
+            self.header.num_atoms as usize,
+            frame_index as f32 * self.time_step,
+        )
+    }
+
+    fn frame_stride(num_atoms: usize) -> u64 {
+        let coord_block = 4 + num_atoms * 4 + 4;
+        (coord_block * 3) as u64
+    }
+
+    /// Read DCD header (Fortran unformatted format). Returns header and byte offset to first frame.
+    fn read_header<R: Read>(reader: &mut R) -> IOResult<(DcdHeader, u64)> {
+        let start = 0_u64;
+        let mut bytes_read = 0_u64;
+
         let rec1_size = reader.read_i32::<LittleEndian>()?;
+        bytes_read += 4;
 
         if rec1_size != DCD_MAGIC_NUMBER {
             return Err(IOError::ParseError {
@@ -136,53 +137,53 @@ impl DcdParser {
 
         let mut header = DcdHeader::default();
 
-        // CORD (4 bytes)
         let mut cord = [0u8; 4];
         reader.read_exact(&mut cord)?;
+        bytes_read += 4;
         header.charmm = &cord == b"CORD";
 
-        // NSET (num frames), ISTRT, NSAVC
         header.num_frames = reader.read_i32::<LittleEndian>()?;
         header.start_step = reader.read_i32::<LittleEndian>()?;
         header.skip = reader.read_i32::<LittleEndian>()?;
         header.num_sets = reader.read_i32::<LittleEndian>()?;
+        bytes_read += 16;
 
-        // 5 zeros
         for _ in 0..5 {
             let _ = reader.read_i32::<LittleEndian>()?;
+            bytes_read += 4;
         }
-
-        // NATOM-NFREAT (often 0)
         let _ = reader.read_i32::<LittleEndian>()?;
+        bytes_read += 4;
 
-        // DELTA (8 bytes, double)
         header.delta = reader.read_f64::<LittleEndian>()? as f32;
+        bytes_read += 8;
 
-        // 9 zeros
         for _ in 0..9 {
             let _ = reader.read_i32::<LittleEndian>()?;
+            bytes_read += 4;
         }
-
-        // End of first record (4 bytes)
         let _ = reader.read_i32::<LittleEndian>()?;
+        bytes_read += 4;
 
-        // Second record: NTITLE (4-byte record with single i32)
-        let _ = reader.read_i32::<LittleEndian>()?; // record size = 4
+        let _ = reader.read_i32::<LittleEndian>()?;
+        bytes_read += 4;
         let n_title = reader.read_i32::<LittleEndian>()?;
-        let _ = reader.read_i32::<LittleEndian>()?; // trailing record size
+        bytes_read += 8;
 
-        // Third record: TITLE strings (80 chars each)
         if n_title > 0 {
-            let title_rec_size = reader.read_i32::<LittleEndian>()?; // 80 * n_title
+            let title_rec_size = reader.read_i32::<LittleEndian>()?;
+            bytes_read += 4;
             let title_len = title_rec_size as usize;
             let mut title_bytes = vec![0u8; title_len];
             reader.read_exact(&mut title_bytes)?;
+            bytes_read += title_len as u64;
             header.title = String::from_utf8_lossy(&title_bytes).trim().to_string();
-            let _ = reader.read_i32::<LittleEndian>()?; // trailing record size
+            let _ = reader.read_i32::<LittleEndian>()?;
+            bytes_read += 4;
         }
 
-        // Fourth record: NATOM
         let natom_rec_size = reader.read_i32::<LittleEndian>()?;
+        bytes_read += 4;
         if natom_rec_size != 4 {
             return Err(IOError::ParseError {
                 line: 0,
@@ -191,21 +192,21 @@ impl DcdParser {
         }
         header.num_atoms = reader.read_i32::<LittleEndian>()?;
         let _ = reader.read_i32::<LittleEndian>()?;
+        bytes_read += 8;
 
-        Ok(header)
+        Ok((header, start + bytes_read))
     }
 
-    /// Read a single DCD frame
-    fn read_frame<R: Read>(
+    /// Read a single DCD frame from the current reader position.
+    fn read_frame_at<R: Read>(
         reader: &mut R,
         frame_index: usize,
         num_atoms: usize,
+        time: f32,
     ) -> IOResult<FrameData> {
-        let mut frame = FrameData::new(frame_index, frame_index as f32 * 0.0);
+        let mut frame = FrameData::new(frame_index, time);
 
-        // Read X coordinates
         let nx_size = reader.read_i32::<LittleEndian>()?;
-
         if nx_size != (num_atoms * 4) as i32 {
             return Err(IOError::ParseError {
                 line: 0,
@@ -221,12 +222,9 @@ impl DcdParser {
         for x in &mut x_coords {
             *x = reader.read_f32::<LittleEndian>()?;
         }
+        reader.read_i32::<LittleEndian>()?;
 
-        reader.read_i32::<LittleEndian>()?; // End of X record
-
-        // Read Y coordinates
         let ny_size = reader.read_i32::<LittleEndian>()?;
-
         if ny_size != (num_atoms * 4) as i32 {
             return Err(IOError::ParseError {
                 line: 0,
@@ -242,12 +240,9 @@ impl DcdParser {
         for y in &mut y_coords {
             *y = reader.read_f32::<LittleEndian>()?;
         }
+        reader.read_i32::<LittleEndian>()?;
 
-        reader.read_i32::<LittleEndian>()?; // End of Y record
-
-        // Read Z coordinates
         let nz_size = reader.read_i32::<LittleEndian>()?;
-
         if nz_size != (num_atoms * 4) as i32 {
             return Err(IOError::ParseError {
                 line: 0,
@@ -263,16 +258,57 @@ impl DcdParser {
         for z in &mut z_coords {
             *z = reader.read_f32::<LittleEndian>()?;
         }
+        reader.read_i32::<LittleEndian>()?;
 
-        reader.read_i32::<LittleEndian>()?; // End of Z record
-
-        // Store positions
         for i in 0..num_atoms {
-            let position = Vec3::new(x_coords[i], y_coords[i], z_coords[i]);
-            frame.set_position(i as u32, position);
+            frame.set_position(i as u32, Vec3::new(x_coords[i], y_coords[i], z_coords[i]));
         }
 
         Ok(frame)
+    }
+}
+
+/// DCD format parser
+pub struct DcdParser;
+
+impl DcdParser {
+    /// Parse a DCD file and return trajectory data (loads all frames into RAM).
+    pub fn parse_file(path: &Path) -> IOResult<Trajectory> {
+        let reader = DcdReader::open(path)?;
+        let header = reader.header().clone();
+        let num_atoms = reader.num_atoms();
+        let num_frames = reader.num_frames();
+
+        info!("DCD: {} frames, {} atoms", num_frames, num_atoms);
+
+        let mut metadata = TrajectoryMetadata::default();
+        metadata.title = header.title.clone();
+        metadata.software = if header.charmm {
+            "CHARMM".to_string()
+        } else {
+            "NAMD/CHARMM".to_string()
+        };
+        metadata.num_steps = Some(header.num_sets as u64);
+        metadata.step_size = Some(header.delta);
+
+        let mut trajectory = Trajectory::new(path.to_path_buf(), num_atoms, reader.time_step());
+        trajectory.metadata = metadata;
+
+        for frame_index in 0..num_frames {
+            trajectory.add_frame(reader.read_frame(frame_index)?);
+        }
+
+        Ok(trajectory)
+    }
+
+    /// Parse DCD with atom metadata from a topology file (coordinates only from DCD).
+    pub fn parse_with_atom_data(path: &Path, _atom_data: &[AtomData]) -> IOResult<Trajectory> {
+        Self::parse_file(path)
+    }
+
+    /// Check whether bytes look like a DCD file (magic number 84).
+    pub fn is_dcd_bytes(data: &[u8]) -> bool {
+        data.len() >= 4 && i32::from_le_bytes([data[0], data[1], data[2], data[3]]) == DCD_MAGIC_NUMBER
     }
 }
 
@@ -286,23 +322,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_dcd_constants() {
-        assert_eq!(DCD_MAGIC_NUMBER, 84);
-        assert_eq!(DCD_HEADER_SIZE, 224);
-        assert_eq!(DCD_TITLE_SIZE, 80);
+    fn test_dcd_magic_detection() {
+        assert!(DcdParser::is_dcd_bytes(&84_i32.to_le_bytes()));
+        assert!(!DcdParser::is_dcd_bytes(b"ATOM"));
     }
 
     #[test]
-    fn test_dcd_header_parse() {
-        // Note: This is a placeholder test
-        // Real DCD files are binary, so we can't easily create test strings
-        assert!(true);
-    }
-
-    #[test]
-    fn test_dcd_frame_parse() {
-        // Note: This is a placeholder test
-        // Real DCD files are binary, so we can't easily create test strings
-        assert!(true);
+    fn test_frame_stride() {
+        assert_eq!(DcdReader::frame_stride(100), (8 + 100 * 4) * 3);
     }
 }

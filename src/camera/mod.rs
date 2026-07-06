@@ -33,7 +33,7 @@ fn focus_on_molecule_key(
         return;
     }
 
-    let Some(frame) = sim_data.trajectory.get_frame(0) else {
+    let Some(frame) = sim_data.get_frame(0) else {
         return;
     };
 

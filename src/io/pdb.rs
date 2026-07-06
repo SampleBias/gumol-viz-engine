@@ -205,8 +205,8 @@ impl PDBParser {
             None
         };
 
-        // Determine element from atom name
-        let element = Self::parse_element_from_name(&name).unwrap_or(Element::C);
+        // Element: prefer PDB columns 77–78, then protein-aware atom name inference.
+        let element = Self::parse_element(line, &name);
 
         Ok(Some(AtomData {
             id: serial,
@@ -223,28 +223,23 @@ impl PDBParser {
         }))
     }
 
-    /// Parse element from atom name
-    fn parse_element_from_name(name: &str) -> Option<Element> {
-        // Try direct parse first
-        if let Ok(element) = Element::from_symbol(name) {
-            return Some(element);
-        }
-
-        // Try first two characters
-        if name.len() >= 2 {
-            if let Ok(element) = Element::from_symbol(&name[0..2]) {
-                return Some(element);
+    /// Parse element from PDB record (columns 77–78) with atom-name fallback.
+    fn parse_element(line: &str, atom_name: &str) -> Element {
+        if line.len() >= 78 {
+            let symbol = line[76..78].trim();
+            if !symbol.is_empty() {
+                if let Ok(element) = Element::from_symbol(symbol) {
+                    return element;
+                }
             }
         }
+        Element::from_atom_name(atom_name)
+    }
 
-        // Try first character
-        if !name.is_empty() {
-            if let Ok(element) = Element::from_symbol(&name[0..1]) {
-                return Some(element);
-            }
-        }
-
-        None
+    /// Extract static atom metadata and bonds from a topology file (single frame).
+    pub fn parse_topology(path: &Path) -> IOResult<(Vec<AtomData>, Vec<BondData>)> {
+        let (_, atom_data, bond_data) = Self::parse_file_with_atoms(path)?;
+        Ok(crate::io::topology::normalize_topology(atom_data, bond_data))
     }
 
     /// Parse CONECT record (bonds)
