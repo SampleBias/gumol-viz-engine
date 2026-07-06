@@ -139,8 +139,7 @@ pub fn sync_mode_params(
         });
         info!(
             "Visualization mode: {:?} -> {:?}",
-            old_mode,
-            config.render_mode
+            old_mode, config.render_mode
         );
     }
 }
@@ -191,7 +190,10 @@ pub fn cycle_render_mode(
         new_mode: next_mode,
     });
 
-    info!("Cycled visualization mode: {:?} -> {:?}", old_mode, next_mode);
+    info!(
+        "Cycled visualization mode: {:?} -> {:?}",
+        old_mode, next_mode
+    );
 }
 
 /// Register visualization resources and events. Systems are registered centrally in systems::register.

@@ -22,26 +22,38 @@ impl PDBParser {
     }
 
     /// Parse a PDB file returning trajectory, atom metadata, and CONECT bonds
-    pub fn parse_file_with_atoms(path: &Path) -> IOResult<(Trajectory, Vec<AtomData>, Vec<BondData>)> {
-        let file = File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
+    pub fn parse_file_with_atoms(
+        path: &Path,
+    ) -> IOResult<(Trajectory, Vec<AtomData>, Vec<BondData>)> {
+        let file =
+            File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
         let reader = BufReader::new(file);
         Self::parse_reader(reader, path.to_path_buf())
     }
 
     /// Parse PDB format from a reader
-    pub fn parse_reader<R: Read>(reader: R, file_path: PathBuf) -> IOResult<(Trajectory, Vec<AtomData>, Vec<BondData>)> {
+    pub fn parse_reader<R: Read>(
+        reader: R,
+        file_path: PathBuf,
+    ) -> IOResult<(Trajectory, Vec<AtomData>, Vec<BondData>)> {
         let reader = BufReader::new(reader);
         let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
         Self::parse_lines(&lines, file_path)
     }
 
     /// Parse PDB format from string content
-    pub fn parse_string(content: &str, file_path: PathBuf) -> IOResult<(Trajectory, Vec<AtomData>, Vec<BondData>)> {
+    pub fn parse_string(
+        content: &str,
+        file_path: PathBuf,
+    ) -> IOResult<(Trajectory, Vec<AtomData>, Vec<BondData>)> {
         let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
         Self::parse_lines(&lines, file_path)
     }
 
-    fn parse_lines(lines: &[String], file_path: PathBuf) -> IOResult<(Trajectory, Vec<AtomData>, Vec<BondData>)> {
+    fn parse_lines(
+        lines: &[String],
+        file_path: PathBuf,
+    ) -> IOResult<(Trajectory, Vec<AtomData>, Vec<BondData>)> {
         let mut atom_data = Vec::new();
         let mut bond_data = Vec::new();
         let mut frames = Vec::new();
@@ -101,7 +113,9 @@ impl PDBParser {
         }
 
         // Add the last frame if it has data
-        if !current_frame.positions.is_empty() && (frames.is_empty() || current_frame.index != frames.last().unwrap().index) {
+        if !current_frame.positions.is_empty()
+            && (frames.is_empty() || current_frame.index != frames.last().unwrap().index)
+        {
             frames.push(current_frame);
         }
 
@@ -162,10 +176,13 @@ impl PDBParser {
             });
         }
 
-        let serial = line[6..11].trim().parse::<u32>().map_err(|_| IOError::ParseError {
-            line: line_num,
-            message: format!("Invalid serial number: {}", &line[6..11]),
-        })?;
+        let serial = line[6..11]
+            .trim()
+            .parse::<u32>()
+            .map_err(|_| IOError::ParseError {
+                line: line_num,
+                message: format!("Invalid serial number: {}", &line[6..11]),
+            })?;
 
         let name = line[12..16].trim().to_string();
         let residue_name = line[17..20].trim().to_string();
@@ -174,23 +191,35 @@ impl PDBParser {
         } else {
             String::new()
         };
-        let residue_seq = line[22..26].trim().parse::<u32>().map_err(|_| IOError::ParseError {
-            line: line_num,
-            message: format!("Invalid residue sequence: {}", &line[22..26]),
-        })?;
+        let residue_seq = line[22..26]
+            .trim()
+            .parse::<u32>()
+            .map_err(|_| IOError::ParseError {
+                line: line_num,
+                message: format!("Invalid residue sequence: {}", &line[22..26]),
+            })?;
 
-        let x = line[30..38].trim().parse::<f32>().map_err(|_| IOError::ParseError {
-            line: line_num,
-            message: format!("Invalid X coordinate: {}", &line[30..38]),
-        })?;
-        let y = line[38..46].trim().parse::<f32>().map_err(|_| IOError::ParseError {
-            line: line_num,
-            message: format!("Invalid Y coordinate: {}", &line[38..46]),
-        })?;
-        let z = line[46..54].trim().parse::<f32>().map_err(|_| IOError::ParseError {
-            line: line_num,
-            message: format!("Invalid Z coordinate: {}", &line[46..54]),
-        })?;
+        let x = line[30..38]
+            .trim()
+            .parse::<f32>()
+            .map_err(|_| IOError::ParseError {
+                line: line_num,
+                message: format!("Invalid X coordinate: {}", &line[30..38]),
+            })?;
+        let y = line[38..46]
+            .trim()
+            .parse::<f32>()
+            .map_err(|_| IOError::ParseError {
+                line: line_num,
+                message: format!("Invalid Y coordinate: {}", &line[38..46]),
+            })?;
+        let z = line[46..54]
+            .trim()
+            .parse::<f32>()
+            .map_err(|_| IOError::ParseError {
+                line: line_num,
+                message: format!("Invalid Z coordinate: {}", &line[46..54]),
+            })?;
 
         // Parse occupancy and temperature factor
         let occupancy = if line.len() >= 60 {
@@ -239,7 +268,9 @@ impl PDBParser {
     /// Extract static atom metadata and bonds from a topology file (single frame).
     pub fn parse_topology(path: &Path) -> IOResult<(Vec<AtomData>, Vec<BondData>)> {
         let (_, atom_data, bond_data) = Self::parse_file_with_atoms(path)?;
-        Ok(crate::io::topology::normalize_topology(atom_data, bond_data))
+        Ok(crate::io::topology::normalize_topology(
+            atom_data, bond_data,
+        ))
     }
 
     /// Parse CONECT record (bonds)
@@ -250,18 +281,16 @@ impl PDBParser {
             return Ok(None);
         }
 
-        let atom_a = parts[1]
-            .parse::<u32>()
-            .map_err(|_| IOError::ParseError {
-                line: line_num,
-                message: format!("Invalid atom ID: {}", parts[1]),
-            })?;
+        let atom_a = parts[1].parse::<u32>().map_err(|_| IOError::ParseError {
+            line: line_num,
+            message: format!("Invalid atom ID: {}", parts[1]),
+        })?;
 
         let mut bonds = Vec::new();
 
         // CONECT can have multiple bonded atoms
-        for i in 2..parts.len() {
-            if let Ok(atom_b) = parts[i].parse::<u32>() {
+        for part in parts.iter().skip(2) {
+            if let Ok(atom_b) = part.parse::<u32>() {
                 bonds.push(BondData::new(
                     atom_a,
                     atom_b,
@@ -289,8 +318,6 @@ impl PDBWriter {
         frame: &FrameData,
         atom_data: &[AtomData],
     ) -> IOResult<()> {
-        use std::io::Write;
-
         for atom in atom_data {
             if let Some(pos) = frame.get_position(atom.id) {
                 // Write ATOM or HETATM record
@@ -326,9 +353,26 @@ impl PDBWriter {
     fn is_standard_residue(name: &str) -> bool {
         matches!(
             name.to_uppercase().as_str(),
-            "ALA" | "ARG" | "ASN" | "ASP" | "CYS" | "GLN" | "GLU" | "GLY" | "HIS"
-                | "ILE" | "LEU" | "LYS" | "MET" | "PHE" | "PRO" | "SER" | "THR"
-                | "TRP" | "TYR" | "VAL"
+            "ALA"
+                | "ARG"
+                | "ASN"
+                | "ASP"
+                | "CYS"
+                | "GLN"
+                | "GLU"
+                | "GLY"
+                | "HIS"
+                | "ILE"
+                | "LEU"
+                | "LYS"
+                | "MET"
+                | "PHE"
+                | "PRO"
+                | "SER"
+                | "THR"
+                | "TRP"
+                | "TYR"
+                | "VAL"
         )
     }
 }
@@ -354,10 +398,7 @@ ATOM      4  O   ALA A   1       2.500   1.000   0.000  1.00 20.00           O
 END
 "#;
 
-        let result = PDBParser::parse_string(
-            pdb_content,
-            PathBuf::from("test.pdb"),
-        );
+        let result = PDBParser::parse_string(pdb_content, PathBuf::from("test.pdb"));
 
         assert!(result.is_ok());
         let (trajectory, atom_data, _bonds) = result.unwrap();
@@ -390,10 +431,7 @@ ENDMDL
 END
 "#;
 
-        let result = PDBParser::parse_string(
-            pdb_content,
-            PathBuf::from("test.pdb"),
-        );
+        let result = PDBParser::parse_string(pdb_content, PathBuf::from("test.pdb"));
 
         assert!(result.is_ok());
         let (trajectory, atom_data, _bonds) = result.unwrap();

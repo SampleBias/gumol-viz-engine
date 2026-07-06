@@ -86,15 +86,17 @@ impl DcdFrameProvider {
         let num_frames = reader.num_frames();
         let time_step = reader.time_step();
 
-        let mut metadata = TrajectoryMetadata::default();
-        metadata.title = header.title.clone();
-        metadata.software = if header.charmm {
-            "CHARMM".to_string()
-        } else {
-            "NAMD/CHARMM".to_string()
+        let metadata = TrajectoryMetadata {
+            title: header.title.clone(),
+            software: if header.charmm {
+                "CHARMM".to_string()
+            } else {
+                "NAMD/CHARMM".to_string()
+            },
+            num_steps: Some(header.num_sets as u64),
+            step_size: Some(header.delta),
+            ..Default::default()
         };
-        metadata.num_steps = Some(header.num_sets as u64);
-        metadata.step_size = Some(header.delta);
 
         Ok(Self {
             reader: Arc::new(Mutex::new(reader)),
@@ -108,9 +110,10 @@ impl DcdFrameProvider {
 
     /// Load every frame into memory (for small DCD files).
     pub fn load_all_frames(&self) -> IOResult<Vec<FrameData>> {
-        let reader = self.reader.lock().map_err(|_| {
-            IOError::InvalidFormat("DCD reader lock poisoned".to_string())
-        })?;
+        let reader = self
+            .reader
+            .lock()
+            .map_err(|_| IOError::InvalidFormat("DCD reader lock poisoned".to_string()))?;
         let mut frames = Vec::with_capacity(self.num_frames);
         for i in 0..self.num_frames {
             frames.push(reader.read_frame(i)?);
@@ -148,12 +151,16 @@ impl FrameProvider for DcdFrameProvider {
         if index >= self.num_frames {
             return Err(IOError::ParseError {
                 line: 0,
-                message: format!("Frame index {index} out of range ({} frames)", self.num_frames),
+                message: format!(
+                    "Frame index {index} out of range ({} frames)",
+                    self.num_frames
+                ),
             });
         }
-        let reader = self.reader.lock().map_err(|_| IOError::InvalidFormat(
-            "DCD reader lock poisoned".to_string(),
-        ))?;
+        let reader = self
+            .reader
+            .lock()
+            .map_err(|_| IOError::InvalidFormat("DCD reader lock poisoned".to_string()))?;
         reader.read_frame(index)
     }
 }
@@ -174,9 +181,7 @@ pub fn open_dcd(path: &Path) -> IOResult<(Trajectory, Option<Arc<dyn FrameProvid
     if DcdFrameProvider::should_stream(num_atoms, num_frames) {
         info!(
             "DCD streaming enabled: {} frames × {} atoms (threshold {})",
-            num_frames,
-            num_atoms,
-            STREAMING_ATOM_FRAMES_THRESHOLD
+            num_frames, num_atoms, STREAMING_ATOM_FRAMES_THRESHOLD
         );
         let mut trajectory = Trajectory::new(path.to_path_buf(), num_atoms, time_step);
         trajectory.metadata = metadata;

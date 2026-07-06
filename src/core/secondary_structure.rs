@@ -89,8 +89,8 @@ pub fn assign_secondary_structure(residues: &mut [BackboneResidue]) {
             let d13 = residues[i].position.distance(residues[i + 3].position);
             let d14 = residues[i].position.distance(residues[i + 4].position);
             if d13 < 6.0 && d14 < 7.0 {
-                for j in i..=i + 3 {
-                    ss[j] = SecondaryStructure::AlphaHelix;
+                for ss_j in ss.iter_mut().skip(i).take(4) {
+                    *ss_j = SecondaryStructure::AlphaHelix;
                 }
             }
         }
@@ -145,10 +145,7 @@ mod tests {
             ca(1, 2, Vec3::X * 3.8),
             ca(2, 3, Vec3::X * 7.6),
         ];
-        let positions: HashMap<u32, Vec3> = atoms
-            .iter()
-            .map(|a| (a.id, a.position))
-            .collect();
+        let positions: HashMap<u32, Vec3> = atoms.iter().map(|a| (a.id, a.position)).collect();
         let backbone = build_protein_backbone(&atoms, &positions);
         assert_eq!(backbone.ca_count, 3);
         assert!(!backbone.cartoon_available);

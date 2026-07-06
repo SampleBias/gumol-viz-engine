@@ -6,23 +6,23 @@ pub mod notifications;
 
 use crate::core::secondary_structure::ProteinBackbone;
 use crate::core::secondary_structure::MIN_CARTOON_RESIDUES;
+use crate::core::trajectory::TimelineState;
 use crate::core::visualization::{RenderMode, VisualizationConfig};
 use crate::export::gltf_export::RequestExportGltfEvent;
 use crate::export::obj::RequestExportObjEvent;
 use crate::export::screenshot::RequestScreenshotEvent;
+use crate::interaction::measurement::MeasurementState;
+use crate::interaction::selection::SelectionState;
 use crate::io::FileFormat;
 use crate::performance::{memory, PerformanceDiagnostics};
+use crate::rendering::instanced::InstancedAtomEntities;
+use crate::systems::bonds::{BondDetectionConfig, BondEntities};
 use crate::systems::loading::{
     AsyncLoadState, CliFileArg, FileLoadErrorEvent, LoadFileEvent, LoadTopologyEvent,
     SimulationData, TopologyState,
 };
-use crate::rendering::instanced::InstancedAtomEntities;
-use crate::systems::bonds::{BondEntities, BondDetectionConfig};
-use crate::core::trajectory::TimelineState;
-use crate::interaction::measurement::MeasurementState;
-use crate::interaction::selection::SelectionState;
-use bevy::prelude::*;
 use bevy::ecs::system::SystemParam;
+use bevy::prelude::*;
 use bevy::window::FileDragAndDrop;
 use crossbeam_channel;
 use std::path::Path;
@@ -130,10 +130,7 @@ pub fn file_drop_handler(
             } else if path_buf.exists() {
                 let format = FileFormat::from_path(path_buf);
                 if !format.is_loadable() {
-                    warn!(
-                        "Dropped file format not yet supported: {:?}",
-                        path_buf
-                    );
+                    warn!("Dropped file format not yet supported: {:?}", path_buf);
                 }
             } else {
                 warn!("Dropped path does not exist: {:?}", path_buf);
@@ -235,6 +232,7 @@ pub struct TopologyUiState<'w> {
 }
 
 /// Main UI panel: status, Open button, controls, error display
+#[allow(clippy::too_many_arguments)]
 pub fn main_ui_panel(
     mut contexts: bevy_egui::EguiContexts,
     sim_data: Res<SimulationData>,
@@ -266,7 +264,10 @@ pub fn main_ui_panel(
             // Open file button
             let dialog_pending = picker_state.receiver.is_some();
             if ui
-                .add_enabled(!dialog_pending, bevy_egui::egui::Button::new("📂 Open file..."))
+                .add_enabled(
+                    !dialog_pending,
+                    bevy_egui::egui::Button::new("📂 Open file..."),
+                )
                 .clicked()
             {
                 let (tx, rx) = crossbeam_channel::unbounded();
@@ -274,7 +275,10 @@ pub fn main_ui_panel(
 
                 std::thread::spawn(move || {
                     let result = rfd::FileDialog::new()
-                        .add_filter("Molecular files (XYZ, PDB, GRO, mmCIF, DCD)", LOADABLE_EXTENSIONS)
+                        .add_filter(
+                            "Molecular files (XYZ, PDB, GRO, mmCIF, DCD)",
+                            LOADABLE_EXTENSIONS,
+                        )
                         .add_filter("All molecular formats", SUPPORTED_EXTENSIONS)
                         .add_filter("All files", &["*"])
                         .pick_file();
@@ -295,14 +299,14 @@ pub fn main_ui_panel(
                     bevy_egui::egui::RichText::new("✓ File loaded")
                         .color(bevy_egui::egui::Color32::from_rgb(0, 180, 0)),
                 );
-                ui.label(format!(
-                    "  {}",
-                    sim_data.trajectory.file_path.display()
-                ));
+                ui.label(format!("  {}", sim_data.trajectory.file_path.display()));
                 ui.label(format!("  Atoms: {}", sim_data.num_atoms()));
                 ui.label(format!("  Frames: {}", sim_data.num_frames()));
                 ui.label(format!("  Time: {:.2} fs", sim_data.total_time()));
-                ui.label(format!("  Draw calls: ~{}", instanced_entities.entities.len()));
+                ui.label(format!(
+                    "  Draw calls: ~{}",
+                    instanced_entities.entities.len()
+                ));
                 if async_load.in_progress {
                     ui.label(
                         bevy_egui::egui::RichText::new("  Loading file (background)...")
@@ -355,7 +359,9 @@ pub fn main_ui_panel(
                         });
                     }
                     if topo_pending {
-                        ui.label(bevy_egui::egui::RichText::new("Opening topology dialog...").italics());
+                        ui.label(
+                            bevy_egui::egui::RichText::new("Opening topology dialog...").italics(),
+                        );
                     }
                 } else if topology_ui.topology_state.path.is_some() {
                     ui.label(format!(
@@ -400,7 +406,11 @@ pub fn main_ui_panel(
             let total_frames = sim_data.num_frames();
             if total_frames > 1 {
                 let time_ps = timeline.simulation_time(sim_data.trajectory.time_step) / 1000.0;
-                ui.label(format!("Frame: {} / {}", timeline.current_frame + 1, total_frames));
+                ui.label(format!(
+                    "Frame: {} / {}",
+                    timeline.current_frame + 1,
+                    total_frames
+                ));
                 ui.label(format!("Time: {:.3} ps", time_ps));
                 if timeline.interpolate && timeline.is_playing {
                     ui.label(
@@ -415,12 +425,13 @@ pub fn main_ui_panel(
 
                 // Frame scrubber (includes sub-frame progress when interpolating)
                 let mut progress = timeline.progress();
-                if ui.add(
-                    bevy_egui::egui::Slider::new(&mut progress, 0.0..=1.0)
-                        .show_value(false)
-                        .text("Scrub"),
-                )
-                .changed()
+                if ui
+                    .add(
+                        bevy_egui::egui::Slider::new(&mut progress, 0.0..=1.0)
+                            .show_value(false)
+                            .text("Scrub"),
+                    )
+                    .changed()
                 {
                     let max = (total_frames - 1) as f32;
                     let frame_f = progress * max;
@@ -449,7 +460,14 @@ pub fn main_ui_panel(
                 // Playback controls
                 ui.horizontal(|ui| {
                     // Play/Pause button
-                    if ui.button(if timeline.is_playing { "⏸ Pause" } else { "▶ Play" }).clicked() {
+                    if ui
+                        .button(if timeline.is_playing {
+                            "⏸ Pause"
+                        } else {
+                            "▶ Play"
+                        })
+                        .clicked()
+                    {
                         timeline.toggle_playback();
                     }
 
@@ -518,7 +536,10 @@ pub fn main_ui_panel(
 
             ui.label(format!("Selected atoms: {}", selection.len()));
             if selection.len() < 2 {
-                ui.label(bevy_egui::egui::RichText::new("Shift+Click to add atoms for measurements").small());
+                ui.label(
+                    bevy_egui::egui::RichText::new("Shift+Click to add atoms for measurements")
+                        .small(),
+                );
             }
 
             // Measurement display
@@ -550,8 +571,10 @@ pub fn main_ui_panel(
             // Clear selection button
             if !selection.is_empty() {
                 if ui.button("Clear selection").clicked() {
-                    for selected_entity in selection.entities().iter().copied().collect::<Vec<_>>() {
-                        commands.entity(selected_entity).remove::<crate::interaction::selection::Selected>();
+                    for selected_entity in selection.entities().to_vec() {
+                        commands
+                            .entity(selected_entity)
+                            .remove::<crate::interaction::selection::Selected>();
                     }
                     selection.clear();
                     commands.trigger(crate::interaction::selection::SelectionClearedEvent);
@@ -569,11 +592,31 @@ pub fn main_ui_panel(
             bevy_egui::egui::ComboBox::from_label("")
                 .selected_text(viz_ui.viz_config.render_mode.name())
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::CPK, RenderMode::CPK.name());
-                    ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::BallAndStick, RenderMode::BallAndStick.name());
-                    ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::Licorice, RenderMode::Licorice.name());
-                    ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::Wireframe, RenderMode::Wireframe.name());
-                    ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::Points, RenderMode::Points.name());
+                    ui.selectable_value(
+                        &mut viz_ui.viz_config.render_mode,
+                        RenderMode::CPK,
+                        RenderMode::CPK.name(),
+                    );
+                    ui.selectable_value(
+                        &mut viz_ui.viz_config.render_mode,
+                        RenderMode::BallAndStick,
+                        RenderMode::BallAndStick.name(),
+                    );
+                    ui.selectable_value(
+                        &mut viz_ui.viz_config.render_mode,
+                        RenderMode::Licorice,
+                        RenderMode::Licorice.name(),
+                    );
+                    ui.selectable_value(
+                        &mut viz_ui.viz_config.render_mode,
+                        RenderMode::Wireframe,
+                        RenderMode::Wireframe.name(),
+                    );
+                    ui.selectable_value(
+                        &mut viz_ui.viz_config.render_mode,
+                        RenderMode::Points,
+                        RenderMode::Points.name(),
+                    );
 
                     ui.separator();
 
@@ -584,9 +627,21 @@ pub fn main_ui_panel(
                     ui.separator();
                     ui.label("Protein backbone:");
                     ui.add_enabled_ui(viz_ui.backbone.cartoon_available, |ui| {
-                        ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::Cartoon, RenderMode::Cartoon.name());
-                        ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::Tube, RenderMode::Tube.name());
-                        ui.selectable_value(&mut viz_ui.viz_config.render_mode, RenderMode::Trace, RenderMode::Trace.name());
+                        ui.selectable_value(
+                            &mut viz_ui.viz_config.render_mode,
+                            RenderMode::Cartoon,
+                            RenderMode::Cartoon.name(),
+                        );
+                        ui.selectable_value(
+                            &mut viz_ui.viz_config.render_mode,
+                            RenderMode::Tube,
+                            RenderMode::Tube.name(),
+                        );
+                        ui.selectable_value(
+                            &mut viz_ui.viz_config.render_mode,
+                            RenderMode::Trace,
+                            RenderMode::Trace.name(),
+                        );
                     });
                     if !viz_ui.backbone.cartoon_available {
                         ui.label(format!(
@@ -604,7 +659,14 @@ pub fn main_ui_panel(
 
             // Atom size control
             ui.label("Atom Scale:");
-            if ui.add(bevy_egui::egui::Slider::new(&mut viz_ui.viz_config.atom_scale, 0.1..=2.0).logarithmic(true).step_by(0.1)).changed() {
+            if ui
+                .add(
+                    bevy_egui::egui::Slider::new(&mut viz_ui.viz_config.atom_scale, 0.1..=2.0)
+                        .logarithmic(true)
+                        .step_by(0.1),
+                )
+                .changed()
+            {
                 viz_ui.viz_config.atom_scale = viz_ui.viz_config.atom_scale.clamp(0.1, 2.0);
             }
             ui.label(format!("x ({:.2}x)", viz_ui.viz_config.atom_scale));
@@ -613,7 +675,14 @@ pub fn main_ui_panel(
 
             // Bond size control
             ui.label("Bond Scale:");
-            if ui.add(bevy_egui::egui::Slider::new(&mut viz_ui.viz_config.bond_scale, 0.1..=3.0).logarithmic(true).step_by(0.1)).changed() {
+            if ui
+                .add(
+                    bevy_egui::egui::Slider::new(&mut viz_ui.viz_config.bond_scale, 0.1..=3.0)
+                        .logarithmic(true)
+                        .step_by(0.1),
+                )
+                .changed()
+            {
                 viz_ui.viz_config.bond_scale = viz_ui.viz_config.bond_scale.clamp(0.1, 3.0);
             }
             ui.label(format!("x ({:.2}x)", viz_ui.viz_config.bond_scale));
@@ -632,23 +701,41 @@ pub fn main_ui_panel(
             ui.checkbox(&mut viz_ui.bond_config.enabled, "Show bonds");
 
             if viz_ui.bond_config.enabled {
-                ui.label(format!("Bond count: {}", viz_ui.bond_entities.entities.len()));
+                ui.label(format!(
+                    "Bond count: {}",
+                    viz_ui.bond_entities.entities.len()
+                ));
 
                 // Distance settings
                 ui.label("Detection settings:");
                 ui.horizontal(|ui| {
                     ui.label("Multiplier:");
-                    ui.add(bevy_egui::egui::Slider::new(&mut viz_ui.bond_config.distance_multiplier, 1.0..=2.0).step_by(0.1));
-                    ui.label(format!("x"));
+                    ui.add(
+                        bevy_egui::egui::Slider::new(
+                            &mut viz_ui.bond_config.distance_multiplier,
+                            1.0..=2.0,
+                        )
+                        .step_by(0.1),
+                    );
+                    ui.label("x".to_string());
                 });
 
                 ui.horizontal(|ui| {
                     ui.label("Max distance:");
-                    ui.add(bevy_egui::egui::Slider::new(&mut viz_ui.bond_config.max_bond_distance, 2.0..=5.0).step_by(0.1));
-                    ui.label(format!("Å"));
+                    ui.add(
+                        bevy_egui::egui::Slider::new(
+                            &mut viz_ui.bond_config.max_bond_distance,
+                            2.0..=5.0,
+                        )
+                        .step_by(0.1),
+                    );
+                    ui.label("Å".to_string());
                 });
 
-                ui.checkbox(&mut viz_ui.bond_config.same_residue_only, "Same residue only");
+                ui.checkbox(
+                    &mut viz_ui.bond_config.same_residue_only,
+                    "Same residue only",
+                );
             } else {
                 ui.label("Bond detection disabled");
             }
@@ -663,7 +750,10 @@ pub fn main_ui_panel(
             let any_export_pending = screenshot_pending || obj_pending || gltf_pending;
 
             if ui
-                .add_enabled(!screenshot_pending, bevy_egui::egui::Button::new("📷 Screenshot..."))
+                .add_enabled(
+                    !screenshot_pending,
+                    bevy_egui::egui::Button::new("📷 Screenshot..."),
+                )
                 .clicked()
             {
                 let (tx, rx) = crossbeam_channel::unbounded();
@@ -680,7 +770,10 @@ pub fn main_ui_panel(
             }
 
             if ui
-                .add_enabled(!obj_pending, bevy_egui::egui::Button::new("📦 Export OBJ..."))
+                .add_enabled(
+                    !obj_pending,
+                    bevy_egui::egui::Button::new("📦 Export OBJ..."),
+                )
                 .clicked()
             {
                 let (tx, rx) = crossbeam_channel::unbounded();
@@ -696,7 +789,10 @@ pub fn main_ui_panel(
             }
 
             if ui
-                .add_enabled(!gltf_pending, bevy_egui::egui::Button::new("📦 Export glTF..."))
+                .add_enabled(
+                    !gltf_pending,
+                    bevy_egui::egui::Button::new("📦 Export glTF..."),
+                )
                 .clicked()
             {
                 let (tx, rx) = crossbeam_channel::unbounded();

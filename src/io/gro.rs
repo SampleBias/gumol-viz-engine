@@ -32,7 +32,8 @@ pub struct GroParser;
 impl GroParser {
     /// Parse a GRO file and return trajectory data
     pub fn parse_file(path: &Path) -> IOResult<Trajectory> {
-        let file = File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
+        let file =
+            File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
         let reader = BufReader::new(file);
         Self::parse_reader(reader, path.to_path_buf())
     }
@@ -123,7 +124,11 @@ impl GroParser {
                     if frame.velocities.is_none() {
                         frame.velocities = Some(HashMap::new());
                     }
-                    frame.velocities.as_mut().unwrap().insert(i as u32, velocity);
+                    frame
+                        .velocities
+                        .as_mut()
+                        .unwrap()
+                        .insert(i as u32, velocity);
                 }
             } else {
                 return Err(IOError::ParseError {
@@ -139,24 +144,18 @@ impl GroParser {
             // Box vectors: xx yy zz
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() >= 3 {
-                let xx = parts[0]
-                    .parse::<f32>()
-                    .map_err(|_| IOError::ParseError {
-                        line: line_num + 1,
-                        message: format!("Invalid box xx: {}", parts[0]),
-                    })?;
-                let yy = parts[1]
-                    .parse::<f32>()
-                    .map_err(|_| IOError::ParseError {
-                        line: line_num + 1,
-                        message: format!("Invalid box yy: {}", parts[1]),
-                    })?;
-                let zz = parts[2]
-                    .parse::<f32>()
-                    .map_err(|_| IOError::ParseError {
-                        line: line_num + 1,
-                        message: format!("Invalid box zz: {}", parts[2]),
-                    })?;
+                let xx = parts[0].parse::<f32>().map_err(|_| IOError::ParseError {
+                    line: line_num + 1,
+                    message: format!("Invalid box xx: {}", parts[0]),
+                })?;
+                let yy = parts[1].parse::<f32>().map_err(|_| IOError::ParseError {
+                    line: line_num + 1,
+                    message: format!("Invalid box yy: {}", parts[1]),
+                })?;
+                let zz = parts[2].parse::<f32>().map_err(|_| IOError::ParseError {
+                    line: line_num + 1,
+                    message: format!("Invalid box zz: {}", parts[2]),
+                })?;
                 box_size = Some([xx, yy, zz]);
             }
         }
@@ -164,9 +163,11 @@ impl GroParser {
         frame.box_size = box_size;
 
         // Create trajectory
-        let mut metadata = TrajectoryMetadata::default();
-        metadata.title = title;
-        metadata.software = "GROMACS".to_string();
+        let metadata = TrajectoryMetadata {
+            title,
+            software: "GROMACS".to_string(),
+            ..Default::default()
+        };
 
         let mut trajectory = Trajectory::new(file_path, num_atoms, 1.0);
         trajectory.metadata = metadata;
@@ -176,7 +177,9 @@ impl GroParser {
     }
 
     /// Extract atom metadata from the first frame of a GRO file (topology for DCD pairing).
-    pub fn parse_topology(path: &Path) -> IOResult<(Vec<AtomData>, Vec<crate::core::bond::BondData>)> {
+    pub fn parse_topology(
+        path: &Path,
+    ) -> IOResult<(Vec<AtomData>, Vec<crate::core::bond::BondData>)> {
         let trajectory = Self::parse_file(path)?;
         let mut atom_data = Vec::with_capacity(trajectory.num_atoms);
 
@@ -233,9 +236,7 @@ impl GroParser {
 
         // Parse residue number (columns 1-5)
         let residue_id_str = &line[0..5].trim();
-        let residue_id = residue_id_str
-            .parse::<i32>()
-            .unwrap_or_else(|_| atom_id as i32);
+        let residue_id = residue_id_str.parse::<i32>().unwrap_or(atom_id as i32);
 
         // Parse residue name (columns 6-10)
         let residue_name = line[5..10].trim().to_string();
@@ -261,24 +262,18 @@ impl GroParser {
         let y_str = &line[28..36].trim();
         let z_str = &line[36..44].trim();
 
-        let x = x_str
-            .parse::<f32>()
-            .map_err(|_| IOError::ParseError {
-                line: line_num,
-                message: format!("Invalid X coordinate: {}", x_str),
-            })?;
-        let y = y_str
-            .parse::<f32>()
-            .map_err(|_| IOError::ParseError {
-                line: line_num,
-                message: format!("Invalid Y coordinate: {}", y_str),
-            })?;
-        let z = z_str
-            .parse::<f32>()
-            .map_err(|_| IOError::ParseError {
-                line: line_num,
-                message: format!("Invalid Z coordinate: {}", z_str),
-            })?;
+        let x = x_str.parse::<f32>().map_err(|_| IOError::ParseError {
+            line: line_num,
+            message: format!("Invalid X coordinate: {}", x_str),
+        })?;
+        let y = y_str.parse::<f32>().map_err(|_| IOError::ParseError {
+            line: line_num,
+            message: format!("Invalid Y coordinate: {}", y_str),
+        })?;
+        let z = z_str.parse::<f32>().map_err(|_| IOError::ParseError {
+            line: line_num,
+            message: format!("Invalid Z coordinate: {}", z_str),
+        })?;
 
         let position = Vec3::new(x, y, z);
 
@@ -362,7 +357,13 @@ impl GroWriter {
                     writeln!(
                         writer,
                         "{:5}{:5}{:5}{:5}{:8.3}{:8.3}{:8.3}",
-                        residue_id, residue_name, atom_name, atom_id + 1, pos.x, pos.y, pos.z
+                        residue_id,
+                        residue_name,
+                        atom_name,
+                        atom_id + 1,
+                        pos.x,
+                        pos.y,
+                        pos.z
                     )?;
                 }
             }

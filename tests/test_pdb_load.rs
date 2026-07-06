@@ -63,6 +63,8 @@ fn test_load_1crn_pdb_metadata() {
     assert!(!ca_atoms.is_empty());
     assert!(ca_atoms.iter().all(|a| a.element == Element::C));
 
-    let thr1_n = atoms.iter().find(|a| a.residue_name == "THR" && a.name == "N");
+    let thr1_n = atoms
+        .iter()
+        .find(|a| a.residue_name == "THR" && a.name == "N");
     assert_eq!(thr1_n.map(|a| a.element), Some(Element::N));
 }

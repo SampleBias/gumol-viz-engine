@@ -127,6 +127,7 @@ pub struct AtomDeselectedEvent {
 pub struct SelectionClearedEvent;
 
 /// Handle atom selection via clicking
+#[allow(clippy::too_many_arguments)]
 pub fn handle_atom_selection(
     mut commands: Commands,
     mut selection: ResMut<SelectionState>,
@@ -135,9 +136,7 @@ pub fn handle_atom_selection(
     _mouse: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mut click_events: EventReader<Pointer<Click>>,
-    atom_query: Query<
-        (Entity, Option<&Selected>, &PickProxy),
-    >,
+    atom_query: Query<(Entity, Option<&Selected>, &PickProxy)>,
 ) {
     // Process click events from bevy_mod_picking
     for event in click_events.read() {
@@ -146,8 +145,10 @@ pub fn handle_atom_selection(
         // Check if this is a pick proxy atom
         if let Ok((_, _, proxy)) = atom_query.get(entity) {
             let atom_id = proxy.atom_id;
-            let is_shift_held = keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
-            let is_ctrl_held = keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
+            let is_shift_held =
+                keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
+            let is_ctrl_held =
+                keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
 
             // Determine selection action based on modifiers
             let action = if is_shift_held || is_ctrl_held {
@@ -160,7 +161,7 @@ pub fn handle_atom_selection(
 
             match action {
                 SelectionAction::Set => {
-                    for selected_entity in selection.entities().iter().copied().collect::<Vec<_>>() {
+                    for selected_entity in selection.entities().to_vec() {
                         commands.entity(selected_entity).remove::<Selected>();
                         deselected_events.send(AtomDeselectedEvent {
                             entity: selected_entity,
@@ -193,9 +194,11 @@ pub fn handle_atom_selection(
 
     // Handle deselect all (Escape key)
     if keyboard.just_pressed(KeyCode::Escape) && !selection.is_empty() {
-        for selected_entity in selection.entities().iter().copied().collect::<Vec<_>>() {
+        for selected_entity in selection.entities().to_vec() {
             commands.entity(selected_entity).remove::<Selected>();
-            deselected_events.send(AtomDeselectedEvent { entity: selected_entity });
+            deselected_events.send(AtomDeselectedEvent {
+                entity: selected_entity,
+            });
         }
 
         selection.clear();
@@ -261,7 +264,7 @@ pub fn clear_selection_on_load(
 ) {
     if !file_loaded_events.is_empty() && !selection.is_empty() {
         // Deselect all atoms
-        for selected_entity in selection.entities().iter().copied().collect::<Vec<_>>() {
+        for selected_entity in selection.entities().to_vec() {
             commands.entity(selected_entity).remove::<Selected>();
         }
 

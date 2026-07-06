@@ -5,7 +5,7 @@ mod common;
 use bevy::prelude::*;
 use common::fixture;
 use gumol_viz_engine::systems::loading::{
-    handle_load_file_events_sync, FileLoadedEvent, FileLoadErrorEvent, LoadFileEvent,
+    handle_load_file_events_sync, FileLoadErrorEvent, FileLoadedEvent, LoadFileEvent,
     SimulationData,
 };
 

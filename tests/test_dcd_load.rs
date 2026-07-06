@@ -31,5 +31,8 @@ fn test_topology_atom_count_validation() {
 
 #[test]
 fn test_dcd_magic_detection() {
-    assert_eq!(FileFormat::from_bytes(&84_i32.to_le_bytes()), FileFormat::DCD);
+    assert_eq!(
+        FileFormat::from_bytes(&84_i32.to_le_bytes()),
+        FileFormat::DCD
+    );
 }

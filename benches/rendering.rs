@@ -1,14 +1,14 @@
 mod common;
 
+use bevy::prelude::*;
 use common::{synthetic_atom_data, synthetic_positions, synthetic_trajectory};
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use gumol_viz_engine::core::trajectory::FrameData;
 use gumol_viz_engine::performance::PerformanceSettings;
 use gumol_viz_engine::rendering::instanced::AtomInstanceData;
-use gumol_viz_engine::systems::loading::SimulationData;
 use gumol_viz_engine::systems::bonds::{resolve_bond_list, BondDetectionConfig};
+use gumol_viz_engine::systems::loading::SimulationData;
 use gumol_viz_engine::utils::spatial_index::AtomSpatialIndex;
-use bevy::prelude::*;
 
 fn bench_instance_data_build(c: &mut Criterion) {
     let mut group = c.benchmark_group("instance_data_build");
@@ -64,7 +64,7 @@ fn bench_bond_detection(c: &mut Criterion) {
         let atoms = synthetic_atom_data(count);
         let positions = synthetic_positions(count);
         let spatial = AtomSpatialIndex::build(&atoms, &positions);
-        let mut sim = SimulationData::new(synthetic_trajectory(count, 1), atoms);
+        let sim = SimulationData::new(synthetic_trajectory(count, 1), atoms);
 
         group.bench_with_input(BenchmarkId::from_parameter(count), &count, |b, _| {
             b.iter(|| {

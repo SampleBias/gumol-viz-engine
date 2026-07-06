@@ -51,6 +51,7 @@ fn test_format_from_content() {
     let pdb = "ATOM      1  N   ALA A   1       0.000   0.000   0.000";
     assert_eq!(FileFormat::from_content(pdb), FileFormat::PDB);
 
-    let gro = "Water\n    3\n    1SOL    OW    1   0.126   0.639   0.322   0.0001   0.0002   0.0003";
+    let gro =
+        "Water\n    3\n    1SOL    OW    1   0.126   0.639   0.322   0.0001   0.0002   0.0003";
     assert_eq!(FileFormat::from_content(gro), FileFormat::GRO);
 }

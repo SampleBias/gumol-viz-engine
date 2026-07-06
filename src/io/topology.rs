@@ -5,7 +5,10 @@ use crate::core::bond::BondData;
 use std::collections::HashMap;
 
 /// Renumber atoms to sequential 0..N-1 (DCD frame order) and remap bond endpoints.
-pub fn normalize_topology(atom_data: Vec<AtomData>, bond_data: Vec<BondData>) -> (Vec<AtomData>, Vec<BondData>) {
+pub fn normalize_topology(
+    atom_data: Vec<AtomData>,
+    bond_data: Vec<BondData>,
+) -> (Vec<AtomData>, Vec<BondData>) {
     let id_map: HashMap<u32, u32> = atom_data
         .iter()
         .enumerate()
@@ -50,7 +53,7 @@ pub fn validate_atom_count(topology_len: usize, trajectory_atoms: usize) -> Resu
 mod tests {
     use super::*;
     use crate::core::atom::Element;
-    use crate::core::bond::{BondOrder, BondType, BondData};
+    use crate::core::bond::{BondData, BondOrder, BondType};
 
     #[test]
     fn test_normalize_topology_remaps_bonds() {

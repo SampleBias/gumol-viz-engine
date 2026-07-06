@@ -58,8 +58,10 @@ impl VisualizationStyle {
 /// Rendering mode for molecules
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect)]
 #[reflect(Debug, PartialEq, Hash)]
+#[derive(Default)]
 pub enum RenderMode {
     /// CPK (space-filling) - atoms as van der Waals spheres
+    #[default]
     CPK,
     /// Ball-and-stick - reduced atom size with bond cylinders
     BallAndStick,
@@ -77,12 +79,6 @@ pub enum RenderMode {
     Trace,
     /// Points - small points at atom positions
     Points,
-}
-
-impl Default for RenderMode {
-    fn default() -> Self {
-        RenderMode::CPK
-    }
 }
 
 /// Per-mode rendering parameters (atom/bond scale and visibility).
@@ -259,8 +255,10 @@ impl RenderMode {
 /// Coloring scheme for molecules
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect)]
 #[reflect(Debug, PartialEq, Hash)]
+#[derive(Default)]
 pub enum ColorScheme {
     /// CPK colors (element-based)
+    #[default]
     CPK,
     /// Residue type
     Residue,
@@ -284,12 +282,6 @@ pub enum ColorScheme {
     Charge,
     /// Custom property
     Custom,
-}
-
-impl Default for ColorScheme {
-    fn default() -> Self {
-        ColorScheme::CPK
-    }
 }
 
 /// Material properties for rendering
@@ -376,28 +368,28 @@ impl ColorPalette {
     /// Get residue color
     pub fn residue_color(residue_name: &str) -> Color {
         match residue_name.to_uppercase().as_str() {
-            "ALA" => Color::srgb(0.9, 0.9, 0.1),    // yellow
-            "ARG" => Color::srgb(0.1, 0.0, 0.9),    // blue
-            "ASN" => Color::srgb(0.8, 0.7, 0.8),    // light purple
-            "ASP" => Color::srgb(0.9, 0.1, 0.1),    // red
-            "CYS" => Color::srgb(0.9, 0.9, 0.1),    // yellow
-            "GLN" => Color::srgb(0.8, 0.7, 0.8),    // light purple
-            "GLU" => Color::srgb(0.9, 0.1, 0.1),    // red
-            "GLY" => Color::srgb(0.9, 0.9, 0.9),    // white
-            "HIS" => Color::srgb(0.1, 0.5, 0.9),    // light blue
-            "ILE" => Color::srgb(0.1, 0.9, 0.1),    // green
-            "LEU" => Color::srgb(0.1, 0.9, 0.1),    // green
-            "LYS" => Color::srgb(0.1, 0.0, 0.9),    // blue
-            "MET" => Color::srgb(0.9, 0.9, 0.1),    // yellow
-            "PHE" => Color::srgb(0.6, 0.1, 0.6),    // purple
-            "PRO" => Color::srgb(0.9, 0.9, 0.1),    // yellow
-            "SER" => Color::srgb(0.9, 0.9, 0.1),    // yellow
-            "THR" => Color::srgb(0.9, 0.9, 0.1),    // yellow
-            "TRP" => Color::srgb(0.6, 0.1, 0.6),    // purple
-            "TYR" => Color::srgb(0.6, 0.1, 0.6),    // purple
-            "VAL" => Color::srgb(0.1, 0.9, 0.1),    // green
+            "ALA" => Color::srgb(0.9, 0.9, 0.1),         // yellow
+            "ARG" => Color::srgb(0.1, 0.0, 0.9),         // blue
+            "ASN" => Color::srgb(0.8, 0.7, 0.8),         // light purple
+            "ASP" => Color::srgb(0.9, 0.1, 0.1),         // red
+            "CYS" => Color::srgb(0.9, 0.9, 0.1),         // yellow
+            "GLN" => Color::srgb(0.8, 0.7, 0.8),         // light purple
+            "GLU" => Color::srgb(0.9, 0.1, 0.1),         // red
+            "GLY" => Color::srgb(0.9, 0.9, 0.9),         // white
+            "HIS" => Color::srgb(0.1, 0.5, 0.9),         // light blue
+            "ILE" => Color::srgb(0.1, 0.9, 0.1),         // green
+            "LEU" => Color::srgb(0.1, 0.9, 0.1),         // green
+            "LYS" => Color::srgb(0.1, 0.0, 0.9),         // blue
+            "MET" => Color::srgb(0.9, 0.9, 0.1),         // yellow
+            "PHE" => Color::srgb(0.6, 0.1, 0.6),         // purple
+            "PRO" => Color::srgb(0.9, 0.9, 0.1),         // yellow
+            "SER" => Color::srgb(0.9, 0.9, 0.1),         // yellow
+            "THR" => Color::srgb(0.9, 0.9, 0.1),         // yellow
+            "TRP" => Color::srgb(0.6, 0.1, 0.6),         // purple
+            "TYR" => Color::srgb(0.6, 0.1, 0.6),         // purple
+            "VAL" => Color::srgb(0.1, 0.9, 0.1),         // green
             "HOH" | "WAT" => Color::srgb(0.1, 0.5, 0.9), // light blue (water)
-            _ => Color::srgb(0.5, 0.5, 0.5),        // gray
+            _ => Color::srgb(0.5, 0.5, 0.5),             // gray
         }
     }
 
@@ -406,10 +398,12 @@ impl ColorPalette {
         use crate::core::molecule::SecondaryStructure;
 
         match ss {
-            SecondaryStructure::AlphaHelix => Color::srgb(0.9, 0.1, 0.1),   // red
+            SecondaryStructure::AlphaHelix => Color::srgb(0.9, 0.1, 0.1), // red
             SecondaryStructure::ThreeTenHelix => Color::srgb(0.9, 0.3, 0.1), // orange-red
             SecondaryStructure::PiHelix => Color::srgb(0.9, 0.2, 0.1),    // orange-red
-            SecondaryStructure::BetaStrand | SecondaryStructure::BetaSheet => Color::srgb(0.1, 0.1, 0.9), // blue
+            SecondaryStructure::BetaStrand | SecondaryStructure::BetaSheet => {
+                Color::srgb(0.1, 0.1, 0.9)
+            } // blue
             SecondaryStructure::Turn => Color::srgb(0.1, 0.9, 0.1),       // green
             SecondaryStructure::Coil | SecondaryStructure::Unknown => Color::srgb(0.9, 0.9, 0.9), // white
         }
@@ -417,7 +411,9 @@ impl ColorPalette {
 
     /// Get chain color
     pub fn chain_color(chain_id: &str) -> Color {
-        let hash = chain_id.chars().fold(0u32, |acc, c| acc.wrapping_mul(31).wrapping_add(c as u32));
+        let hash = chain_id
+            .chars()
+            .fold(0u32, |acc, c| acc.wrapping_mul(31).wrapping_add(c as u32));
         let hue = (hash % 360) as f32 / 360.0;
         Color::hsla(hue, 0.8, 0.5, 1.0)
     }

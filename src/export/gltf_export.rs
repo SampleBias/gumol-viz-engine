@@ -129,7 +129,9 @@ fn write_gltf(path: &PathBuf, data: &SceneSnapshot) -> std::io::Result<()> {
                 byte_length: USize64::from(idx_bytes.len() as u64),
                 byte_offset: Some(USize64::from(idx_offset as u64)),
                 byte_stride: None,
-                target: Some(Checked::Valid(gltf_json::buffer::Target::ElementArrayBuffer)),
+                target: Some(Checked::Valid(
+                    gltf_json::buffer::Target::ElementArrayBuffer,
+                )),
                 extensions: None,
                 extras: Default::default(),
             },
@@ -170,10 +172,7 @@ fn write_gltf(path: &PathBuf, data: &SceneSnapshot) -> std::io::Result<()> {
             primitives: vec![gltf_json::mesh::Primitive {
                 attributes: {
                     let mut m = BTreeMap::new();
-                    m.insert(
-                        Checked::Valid(Semantic::Positions),
-                        Index::new(0),
-                    );
+                    m.insert(Checked::Valid(Semantic::Positions), Index::new(0));
                     m
                 },
                 extensions: None,
@@ -200,7 +199,7 @@ fn write_gltf(path: &PathBuf, data: &SceneSnapshot) -> std::io::Result<()> {
         ..Default::default()
     };
 
-    let json = root.to_string_pretty().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let json = root.to_string_pretty().map_err(std::io::Error::other)?;
 
     let file = File::create(path)?;
     let mut w = BufWriter::new(file);

@@ -53,6 +53,7 @@ impl MoleculeData {
 /// Molecule type classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect)]
 #[reflect(Debug, PartialEq, Hash)]
+#[derive(Default)]
 pub enum MoleculeType {
     /// Protein
     Protein,
@@ -73,13 +74,8 @@ pub enum MoleculeType {
     /// Polymer
     Polymer,
     /// Unknown molecule type
+    #[default]
     Unknown,
-}
-
-impl Default for MoleculeType {
-    fn default() -> Self {
-        MoleculeType::Unknown
-    }
 }
 
 impl MoleculeType {
@@ -89,13 +85,20 @@ impl MoleculeType {
 
         if name_upper.contains("HOH") || name_upper.contains("WAT") || name_upper.contains("TIP3") {
             MoleculeType::Water
-        } else if name_upper.contains("NA") || name_upper.contains("CL") || name_upper.contains("K") {
+        } else if name_upper.contains("NA") || name_upper.contains("CL") || name_upper.contains("K")
+        {
             MoleculeType::Ion
         } else if name_upper.contains("DNA") || name_upper.contains("RNA") {
             MoleculeType::NucleicAcid
-        } else if name_upper.contains("ALA") || name_upper.contains("GLY") || name_upper.contains("VAL") {
+        } else if name_upper.contains("ALA")
+            || name_upper.contains("GLY")
+            || name_upper.contains("VAL")
+        {
             MoleculeType::Protein
-        } else if name_upper.contains("LIG") || name_upper.contains("INH") || name_upper.contains("ACT") {
+        } else if name_upper.contains("LIG")
+            || name_upper.contains("INH")
+            || name_upper.contains("ACT")
+        {
             MoleculeType::Ligand
         } else {
             MoleculeType::Unknown
@@ -121,6 +124,7 @@ impl MoleculeType {
 /// Secondary structure classification for proteins
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect)]
 #[reflect(Debug, PartialEq, Hash)]
+#[derive(Default)]
 pub enum SecondaryStructure {
     /// Alpha helix
     AlphaHelix,
@@ -137,38 +141,33 @@ pub enum SecondaryStructure {
     /// Coil (no regular structure)
     Coil,
     /// Unknown structure
+    #[default]
     Unknown,
-}
-
-impl Default for SecondaryStructure {
-    fn default() -> Self {
-        SecondaryStructure::Unknown
-    }
 }
 
 /// Amino acid types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AminoAcid {
-    Alanine,    // ALA
-    Arginine,   // ARG
-    Asparagine, // ASN
-    AsparticAcid, // ASP
-    Cysteine,   // CYS
-    GlutamicAcid, // GLU
-    Glutamine,  // GLN
-    Glycine,    // GLY
-    Histidine,  // HIS
-    Isoleucine, // ILE
-    Leucine,    // LEU
-    Lysine,     // LYS
-    Methionine, // MET
+    Alanine,       // ALA
+    Arginine,      // ARG
+    Asparagine,    // ASN
+    AsparticAcid,  // ASP
+    Cysteine,      // CYS
+    GlutamicAcid,  // GLU
+    Glutamine,     // GLN
+    Glycine,       // GLY
+    Histidine,     // HIS
+    Isoleucine,    // ILE
+    Leucine,       // LEU
+    Lysine,        // LYS
+    Methionine,    // MET
     Phenylalanine, // PHE
-    Proline,    // PRO
-    Serine,     // SER
-    Threonine,  // THR
-    Tryptophan, // TRP
-    Tyrosine,   // TYR
-    Valine,     // VAL
+    Proline,       // PRO
+    Serine,        // SER
+    Threonine,     // THR
+    Tryptophan,    // TRP
+    Tyrosine,      // TYR
+    Valine,        // VAL
     Unknown,
 }
 

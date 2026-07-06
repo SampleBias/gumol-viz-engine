@@ -1,12 +1,12 @@
 mod common;
 
+use common::synthetic_trajectory;
 use common::{synthetic_atom_data, synthetic_positions};
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use gumol_viz_engine::performance::PerformanceSettings;
 use gumol_viz_engine::systems::bonds::{resolve_bond_list, BondDetectionConfig};
 use gumol_viz_engine::systems::loading::SimulationData;
 use gumol_viz_engine::utils::spatial_index::AtomSpatialIndex;
-use common::synthetic_trajectory;
 
 fn bench_spatial_vs_naive(c: &mut Criterion) {
     let mut group = c.benchmark_group("bond_spatial_index");
@@ -18,11 +18,15 @@ fn bench_spatial_vs_naive(c: &mut Criterion) {
         let spatial = AtomSpatialIndex::build(&atoms, &positions);
         let sim = SimulationData::new(synthetic_trajectory(count, 1), atoms);
 
-        let mut perf_spatial = PerformanceSettings::default();
-        perf_spatial.spatial_bond_threshold = 100;
+        let perf_spatial = PerformanceSettings {
+            spatial_bond_threshold: 100,
+            ..Default::default()
+        };
 
-        let mut perf_naive = PerformanceSettings::default();
-        perf_naive.spatial_bond_detection = false;
+        let perf_naive = PerformanceSettings {
+            spatial_bond_detection: false,
+            ..Default::default()
+        };
 
         group.bench_with_input(BenchmarkId::new("spatial", count), &count, |b, _| {
             b.iter(|| {

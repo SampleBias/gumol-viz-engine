@@ -106,7 +106,9 @@ pub fn update_atom_positions_from_timeline(
 
         let position = if let (Some(current), Some(next), Some(alpha)) = (
             current_frame_data.get_position(atom_id),
-            next_frame_data.as_ref().and_then(|f| f.get_position(atom_id)),
+            next_frame_data
+                .as_ref()
+                .and_then(|f| f.get_position(atom_id)),
             Some(timeline.interpolation_factor).filter(|_| timeline.interpolate),
         ) {
             current.lerp(next, alpha)
@@ -137,7 +139,11 @@ pub fn handle_timeline_input(
         timeline.toggle_playback();
         info!(
             "Timeline {}",
-            if timeline.is_playing { "playing" } else { "paused" }
+            if timeline.is_playing {
+                "playing"
+            } else {
+                "paused"
+            }
         );
     }
 
@@ -204,10 +210,7 @@ pub fn update_timeline_on_load(
         timeline.is_playing = false;
         timeline.interpolation_factor = 0.0;
         timeline.time_accumulator = 0.0;
-        info!(
-            "Timeline updated: {} frames loaded",
-            event.num_frames
-        );
+        info!("Timeline updated: {} frames loaded", event.num_frames);
     }
 }
 
@@ -233,15 +236,4 @@ pub fn register(app: &mut App) {
         .add_event::<FrameChangedEvent>();
 
     info!("Timeline resources registered");
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_constants() {
-        assert!(TARGET_FPS > 0.0);
-        assert!(MIN_FRAME_TIME > 0.0);
-    }
 }

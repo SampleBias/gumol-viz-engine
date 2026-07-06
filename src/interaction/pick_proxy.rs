@@ -90,7 +90,10 @@ pub fn register(app: &mut App) {
 /// Move pick proxies when timeline updates instanced positions.
 pub fn update_pick_proxy_positions(
     index: Res<InstancedAtomIndex>,
-    instanced: Query<(&crate::rendering::instanced::InstancedAtomEntity, &InstancedAtomMesh)>,
+    instanced: Query<(
+        &crate::rendering::instanced::InstancedAtomEntity,
+        &InstancedAtomMesh,
+    )>,
     mut pick_query: Query<(&PickProxy, &mut Transform)>,
 ) {
     if index.atom_to_instance.is_empty() {

@@ -81,13 +81,13 @@ pub fn palette_color(index: usize, palette: &[Color]) -> Color {
 /// Default color palette for molecules
 pub fn default_palette() -> Vec<Color> {
     vec![
-        Color::srgb(0.9, 0.9, 0.9),  // White
-        Color::srgb(0.9, 0.1, 0.1),  // Red
-        Color::srgb(0.1, 0.1, 0.9),  // Blue
-        Color::srgb(0.1, 0.8, 0.1),  // Green
-        Color::srgb(0.9, 0.9, 0.1),  // Yellow
-        Color::srgb(0.9, 0.6, 0.1),  // Orange
-        Color::srgb(0.6, 0.1, 0.9),  // Purple
-        Color::srgb(0.1, 0.9, 0.9),  // Cyan
+        Color::srgb(0.9, 0.9, 0.9), // White
+        Color::srgb(0.9, 0.1, 0.1), // Red
+        Color::srgb(0.1, 0.1, 0.9), // Blue
+        Color::srgb(0.1, 0.8, 0.1), // Green
+        Color::srgb(0.9, 0.9, 0.1), // Yellow
+        Color::srgb(0.9, 0.6, 0.1), // Orange
+        Color::srgb(0.6, 0.1, 0.9), // Purple
+        Color::srgb(0.1, 0.9, 0.9), // Cyan
     ]
 }

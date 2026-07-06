@@ -1,8 +1,8 @@
 //! Verify the main plugin registers without panicking.
 
 use bevy::prelude::*;
-use bevy::winit::WinitPlugin;
 use bevy::window::WindowPlugin;
+use bevy::winit::WinitPlugin;
 use gumol_viz_engine::GumolVizPlugin;
 
 #[test]

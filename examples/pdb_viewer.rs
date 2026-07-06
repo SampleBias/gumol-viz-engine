@@ -1,9 +1,9 @@
 //! Basic PDB file viewer example
 
 use bevy::prelude::*;
-use gumol_viz_engine::GumolVizPlugin;
-use gumol_viz_engine::io::pdb::PDBParser;
 use gumol_viz_engine::core::trajectory::Trajectory;
+use gumol_viz_engine::io::pdb::PDBParser;
+use gumol_viz_engine::GumolVizPlugin;
 
 #[derive(Resource, Clone, Default)]
 struct TrajectoryResource(Option<Trajectory>);
@@ -23,7 +23,11 @@ fn main() {
     let trajectory = if !file_path.is_empty() {
         match PDBParser::parse_file(std::path::Path::new(&file_path)) {
             Ok(traj) => {
-                println!("Loaded trajectory: {} frames, {} atoms", traj.num_frames(), traj.num_atoms);
+                println!(
+                    "Loaded trajectory: {} frames, {} atoms",
+                    traj.num_frames(),
+                    traj.num_atoms
+                );
                 Some(traj)
             }
             Err(e) => {
@@ -37,20 +41,20 @@ fn main() {
 
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Gumol PDB Viewer".to_string(),
-                resolution: (1920., 1080.).into(),
-                present_mode: bevy::window::PresentMode::AutoVsync,
-                ..default()
-            }),
+        primary_window: Some(Window {
+            title: "Gumol PDB Viewer".to_string(),
+            resolution: (1920., 1080.).into(),
+            present_mode: bevy::window::PresentMode::AutoVsync,
             ..default()
-        }))
-        .add_plugins(bevy_egui::EguiPlugin)
-        .add_plugins(bevy_mod_picking::DefaultPickingPlugins)
-        .add_plugins(bevy_panorbit_camera::PanOrbitCameraPlugin)
-        .add_plugins(GumolVizPlugin)
-        .insert_resource(TrajectoryResource(trajectory))
-        .add_systems(Startup, setup_scene);
+        }),
+        ..default()
+    }))
+    .add_plugins(bevy_egui::EguiPlugin)
+    .add_plugins(bevy_mod_picking::DefaultPickingPlugins)
+    .add_plugins(bevy_panorbit_camera::PanOrbitCameraPlugin)
+    .add_plugins(GumolVizPlugin)
+    .insert_resource(TrajectoryResource(trajectory))
+    .add_systems(Startup, setup_scene);
     app.run();
 }
 
@@ -64,8 +68,7 @@ fn setup_scene(
 
     // Add camera
     commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 0.0, 30.0)
-            .looking_at(Vec3::ZERO, Vec3::Y),
+        transform: Transform::from_xyz(0.0, 0.0, 30.0).looking_at(Vec3::ZERO, Vec3::Y),
         ..default()
     });
 

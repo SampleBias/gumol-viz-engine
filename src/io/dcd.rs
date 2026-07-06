@@ -3,8 +3,8 @@
 //! The DCD format is a binary trajectory format used by CHARMM, NAMD, and others.
 //! Supports full load for small trajectories and seek-based streaming for large ones.
 
-use crate::core::trajectory::{FrameData, Trajectory, TrajectoryMetadata};
 use crate::core::atom::AtomData;
+use crate::core::trajectory::{FrameData, Trajectory, TrajectoryMetadata};
 use crate::io::{IOError, IOResult};
 use bevy::prelude::*;
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -59,8 +59,8 @@ pub struct DcdReader {
 impl DcdReader {
     /// Open a DCD file and parse the header.
     pub fn open(path: &Path) -> IOResult<Self> {
-        let file = File::open(path)
-            .map_err(|_| IOError::FileNotFound(path.display().to_string()))?;
+        let file =
+            File::open(path).map_err(|_| IOError::FileNotFound(path.display().to_string()))?;
         let mut reader = BufReader::new(file);
         let (header, first_frame_offset) = Self::read_header(&mut reader)?;
         let frame_stride = Self::frame_stride(header.num_atoms as usize);
@@ -281,15 +281,17 @@ impl DcdParser {
 
         info!("DCD: {} frames, {} atoms", num_frames, num_atoms);
 
-        let mut metadata = TrajectoryMetadata::default();
-        metadata.title = header.title.clone();
-        metadata.software = if header.charmm {
-            "CHARMM".to_string()
-        } else {
-            "NAMD/CHARMM".to_string()
+        let metadata = TrajectoryMetadata {
+            title: header.title.clone(),
+            software: if header.charmm {
+                "CHARMM".to_string()
+            } else {
+                "NAMD/CHARMM".to_string()
+            },
+            num_steps: Some(header.num_sets as u64),
+            step_size: Some(header.delta),
+            ..Default::default()
         };
-        metadata.num_steps = Some(header.num_sets as u64);
-        metadata.step_size = Some(header.delta);
 
         let mut trajectory = Trajectory::new(path.to_path_buf(), num_atoms, reader.time_step());
         trajectory.metadata = metadata;
@@ -308,7 +310,8 @@ impl DcdParser {
 
     /// Check whether bytes look like a DCD file (magic number 84).
     pub fn is_dcd_bytes(data: &[u8]) -> bool {
-        data.len() >= 4 && i32::from_le_bytes([data[0], data[1], data[2], data[3]]) == DCD_MAGIC_NUMBER
+        data.len() >= 4
+            && i32::from_le_bytes([data[0], data[1], data[2], data[3]]) == DCD_MAGIC_NUMBER
     }
 }
 

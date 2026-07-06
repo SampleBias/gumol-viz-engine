@@ -1,8 +1,10 @@
 //! Shared helpers for criterion benchmarks.
 
+#![allow(dead_code)]
+
+use bevy::prelude::*;
 use gumol_viz_engine::core::atom::{AtomData, Element};
 use gumol_viz_engine::core::trajectory::{FrameData, Trajectory};
-use bevy::prelude::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -48,10 +50,7 @@ pub fn synthetic_trajectory(atom_count: usize, frame_count: usize) -> Trajectory
     for f in 0..frame_count {
         let mut frame = FrameData::new(f, f as f32);
         for i in 0..atom_count {
-            frame.set_position(
-                i as u32,
-                Vec3::new(i as f32 * 0.1, f as f32 * 0.01, 0.0),
-            );
+            frame.set_position(i as u32, Vec3::new(i as f32 * 0.1, f as f32 * 0.01, 0.0));
         }
         trajectory.frames.push(frame);
     }

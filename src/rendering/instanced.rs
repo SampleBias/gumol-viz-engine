@@ -9,8 +9,8 @@ use crate::core::atom::{AtomData, Element};
 use crate::core::trajectory::{FrameData, TimelineState};
 use crate::core::visualization::VisualizationConfig;
 use crate::interaction::selection::SelectionState;
-use crate::rendering::atom_index::InstancedAtomIndex;
 use crate::performance::PerformanceSettings;
+use crate::rendering::atom_index::InstancedAtomIndex;
 use crate::rendering::mesh_pool::AtomMeshPool;
 use bevy::core_pipeline::core_3d::Transparent3d;
 use bevy::ecs::{query::QueryItem, system::SystemParamItem};
@@ -147,7 +147,11 @@ pub fn spawn_atoms_instanced_internal(
 
     let mode_scale = viz_config.render_mode.atom_scale() * viz_config.atom_scale;
     let show_atoms = viz_config.show_atoms && viz_config.render_mode.shows_atoms();
-    let instance_scale = if show_atoms { mode_scale.max(0.001) } else { 0.0 };
+    let instance_scale = if show_atoms {
+        mode_scale.max(0.001)
+    } else {
+        0.0
+    };
 
     let mut atoms_by_element: HashMap<Element, Vec<&AtomData>> = HashMap::new();
     for atom_info in atom_data {
@@ -209,6 +213,7 @@ pub fn spawn_atoms_instanced_internal(
 }
 
 /// System: spawn instanced atoms when a file finishes loading.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_instanced_atoms_on_load(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -275,8 +280,7 @@ pub fn spawn_instanced_atoms_on_load(
 
             diagnostics.estimated_bytes =
                 crate::performance::memory::estimate_simulation_bytes(&sim_data);
-            diagnostics.memory_warning =
-                crate::performance::memory::memory_warning(&sim_data);
+            diagnostics.memory_warning = crate::performance::memory::memory_warning(&sim_data);
 
             spawned_event.send(InstancedAtomsSpawnedEvent {
                 count: sim_data.atom_data.len(),
@@ -293,8 +297,8 @@ pub fn clear_instanced_atoms_on_load(
     mut atom_index: ResMut<InstancedAtomIndex>,
     mut mesh_pool: ResMut<AtomMeshPool>,
     mut pick_entities: ResMut<crate::interaction::pick_proxy::PickProxyEntities>,
-    mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
-    mut topology_events: EventReader<crate::systems::loading::TopologyAppliedEvent>,
+    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    topology_events: EventReader<crate::systems::loading::TopologyAppliedEvent>,
 ) {
     let reload = !file_loaded_events.is_empty() || !topology_events.is_empty();
     if reload {
@@ -411,7 +415,11 @@ pub fn update_instanced_visualization(
 
     let mode_scale = viz_config.render_mode.atom_scale() * viz_config.atom_scale;
     let show_atoms = viz_config.show_atoms && viz_config.render_mode.shows_atoms();
-    let instance_scale = if show_atoms { mode_scale.max(0.001) } else { 0.0 };
+    let instance_scale = if show_atoms {
+        mode_scale.max(0.001)
+    } else {
+        0.0
+    };
 
     for mut mesh in instanced_query.iter_mut() {
         mesh.mode_scale = instance_scale;
@@ -433,7 +441,8 @@ pub fn update_instanced_selection_highlight(
         return;
     }
 
-    let selected: std::collections::HashSet<u32> = selection.selected_atom_ids.iter().copied().collect();
+    let selected: std::collections::HashSet<u32> =
+        selection.selected_atom_ids.iter().copied().collect();
 
     for (entity_info, mut mesh) in instanced_query.iter_mut() {
         let Some(atom_ids) = index.element_atom_ids.get(&entity_info.element) else {
@@ -651,7 +660,9 @@ fn prepare_instance_buffers(
             usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
         });
 
-        commands.entity(entity).insert(InstanceBuffer { buffer, length });
+        commands
+            .entity(entity)
+            .insert(InstanceBuffer { buffer, length });
     }
 }
 

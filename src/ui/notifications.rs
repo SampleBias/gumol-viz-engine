@@ -32,7 +32,11 @@ pub fn on_file_loaded_notify(
         notifications.show(
             format!(
                 "Loaded {} — {} atoms, {} frames",
-                event.path.file_name().and_then(|s| s.to_str()).unwrap_or("file"),
+                event
+                    .path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("file"),
                 event.num_atoms,
                 event.num_frames
             ),

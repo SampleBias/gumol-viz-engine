@@ -4,19 +4,27 @@
 //! the parsed data in Bevy resources.
 
 use crate::core::atom::AtomData;
-use crate::core::trajectory::{FrameData, Trajectory};
 use crate::core::atom::Element;
-use crate::io::streaming::{self, FrameProvider};
-use crate::io::{load_topology, FileFormat, IOResult};
-use crate::io::xyz::XYZParser;
-use crate::io::pdb::PDBParser;
+use crate::core::trajectory::{FrameData, Trajectory};
 use crate::io::gro::GroParser;
 use crate::io::mmcif::MmcifParser;
+use crate::io::pdb::PDBParser;
+use crate::io::streaming::{self, FrameProvider};
+use crate::io::xyz::XYZParser;
+use crate::io::{load_topology, FileFormat, IOResult};
 use bevy::prelude::*;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+type ParsedLoadResult = (
+    Trajectory,
+    Vec<AtomData>,
+    Vec<crate::core::bond::BondData>,
+    Option<Arc<dyn FrameProvider>>,
+    bool,
+);
 
 /// Resource containing the loaded simulation data
 #[derive(Resource, Clone)]
@@ -78,10 +86,7 @@ impl SimulationData {
     }
 
     /// Attach a streaming frame provider (trajectory.frames may be empty).
-    pub fn with_frame_provider(
-        mut self,
-        provider: Arc<dyn FrameProvider>,
-    ) -> Self {
+    pub fn with_frame_provider(mut self, provider: Arc<dyn FrameProvider>) -> Self {
         self.frame_provider = Some(provider);
         self
     }
@@ -228,10 +233,7 @@ pub struct FileLoadErrorEvent {
 }
 
 /// Load a file based on its format
-fn load_file(
-    path: &Path,
-    topology_path: Option<&Path>,
-) -> IOResult<(Trajectory, Vec<AtomData>, Vec<crate::core::bond::BondData>, Option<Arc<dyn FrameProvider>>, bool)> {
+fn load_file(path: &Path, topology_path: Option<&Path>) -> IOResult<ParsedLoadResult> {
     let format = FileFormat::from_path(path);
 
     info!("Loading file: {:?} (format: {:?})", path, format);
@@ -262,14 +264,17 @@ fn load_file(
             if let Some(topo_path) = topology_path {
                 let (atom_data, bond_data) = load_topology(topo_path)?;
                 crate::io::topology::validate_atom_count(atom_data.len(), trajectory.num_atoms)
-                    .map_err(|e| crate::io::IOError::InvalidFormat(e))?;
+                    .map_err(crate::io::IOError::InvalidFormat)?;
                 Ok((trajectory, atom_data, bond_data, frame_provider, false))
             } else {
                 let atom_data = create_placeholder_atom_data(&trajectory)?;
                 Ok((trajectory, atom_data, Vec::new(), frame_provider, true))
             }
         }
-        _ => Err(crate::io::IOError::UnsupportedFormat(format!("{:?}", format))),
+        _ => Err(crate::io::IOError::UnsupportedFormat(format!(
+            "{:?}",
+            format
+        ))),
     }
 }
 
@@ -306,10 +311,10 @@ fn create_atom_data_from_xyz(trajectory: &Trajectory) -> IOResult<Vec<AtomData>>
                         atom_data.push(AtomData::new(
                             atom_index as u32,
                             element,
-                            0,                             // residue ID
-                            "UNK".to_string(),             // residue name
-                            "A".to_string(),               // chain ID
-                            parts[0].to_string(),          // atom name (use element symbol)
+                            0,                    // residue ID
+                            "UNK".to_string(),    // residue name
+                            "A".to_string(),      // chain ID
+                            parts[0].to_string(), // atom name (use element symbol)
                         ));
 
                         atom_index += 1;
@@ -457,7 +462,7 @@ pub fn handle_load_file_events(
         return;
     }
 
-    for event in load_events.read() {
+    if let Some(event) = load_events.read().next() {
         info!("Queueing async load: {:?}", event.path);
 
         let path = event.path.clone();
@@ -471,7 +476,6 @@ pub fn handle_load_file_events(
             let result = load_file(&path, topology.as_deref()).map_err(|e| e.to_string());
             let _ = tx.send(result);
         });
-        break;
     }
 }
 
@@ -499,7 +503,11 @@ pub fn poll_async_load(
                 } else {
                     trajectory.num_frames()
                 },
-                if needs_topology { " (needs topology)" } else { "" }
+                if needs_topology {
+                    " (needs topology)"
+                } else {
+                    ""
+                }
             );
 
             apply_load_result(
@@ -516,8 +524,7 @@ pub fn poll_async_load(
 
             diagnostics.estimated_bytes =
                 crate::performance::memory::estimate_simulation_bytes(&sim_data);
-            diagnostics.memory_warning =
-                crate::performance::memory::memory_warning(&sim_data);
+            diagnostics.memory_warning = crate::performance::memory::memory_warning(&sim_data);
 
             load_success.send(FileLoadedEvent {
                 path,
@@ -616,10 +623,7 @@ pub fn handle_load_file_events_sync(
 }
 
 /// Load a file provided via CLI argument
-pub fn load_cli_file(
-    cli_arg: Res<CliFileArg>,
-    mut load_events: EventWriter<LoadFileEvent>,
-) {
+pub fn load_cli_file(cli_arg: Res<CliFileArg>, mut load_events: EventWriter<LoadFileEvent>) {
     if let Some(ref path) = cli_arg.0 {
         if path.exists() {
             info!("Loading CLI-provided file: {:?}", path);
@@ -631,10 +635,7 @@ pub fn load_cli_file(
 }
 
 /// Startup system to load a default file (optional)
-pub fn load_default_file(
-    _commands: Commands,
-    mut load_events: EventWriter<LoadFileEvent>,
-) {
+pub fn load_default_file(_commands: Commands, mut load_events: EventWriter<LoadFileEvent>) {
     // Check if there's a test file in the examples directory
     let test_files = vec![
         "examples/test.xyz",
@@ -773,10 +774,22 @@ mod tests {
 
     #[test]
     fn test_file_format_detection() {
-        assert_eq!(FileFormat::from_path(Path::new("test.xyz")), FileFormat::XYZ);
-        assert_eq!(FileFormat::from_path(Path::new("test.pdb")), FileFormat::PDB);
-        assert_eq!(FileFormat::from_path(Path::new("test.gro")), FileFormat::GRO);
-        assert_eq!(FileFormat::from_path(Path::new("test.dcd")), FileFormat::DCD);
+        assert_eq!(
+            FileFormat::from_path(Path::new("test.xyz")),
+            FileFormat::XYZ
+        );
+        assert_eq!(
+            FileFormat::from_path(Path::new("test.pdb")),
+            FileFormat::PDB
+        );
+        assert_eq!(
+            FileFormat::from_path(Path::new("test.gro")),
+            FileFormat::GRO
+        );
+        assert_eq!(
+            FileFormat::from_path(Path::new("test.dcd")),
+            FileFormat::DCD
+        );
     }
 
     #[test]
@@ -787,14 +800,26 @@ mod tests {
         let pdb_content = "ATOM      1  N   ALA A   1       0.000   0.000   0.000";
         assert_eq!(FileFormat::from_content(pdb_content), FileFormat::PDB);
 
-        assert_eq!(FileFormat::from_bytes(&84_i32.to_le_bytes()), FileFormat::DCD);
+        assert_eq!(
+            FileFormat::from_bytes(&84_i32.to_le_bytes()),
+            FileFormat::DCD
+        );
     }
 
     #[test]
     fn test_simulation_data() {
         let trajectory = Trajectory::new(PathBuf::from("test"), 100, 1.0);
         let atom_data = (0..100)
-            .map(|i| AtomData::new(i, crate::core::atom::Element::C, 0, "UNK".to_string(), "A".to_string(), format!("C{}", i)))
+            .map(|i| {
+                AtomData::new(
+                    i,
+                    crate::core::atom::Element::C,
+                    0,
+                    "UNK".to_string(),
+                    "A".to_string(),
+                    format!("C{}", i),
+                )
+            })
             .collect();
 
         let sim_data = SimulationData::new(trajectory, atom_data);

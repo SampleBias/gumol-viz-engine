@@ -74,21 +74,13 @@ pub fn generate_cylinder_mesh(length: f32, radius: f32) -> (Vec<[f32; 3]>, Vec<u
     let top_center = vertices.len() as u32;
     vertices.push([0.0, half_length, 0.0]);
     for i in 0..CYLINDER_SEGMENTS {
-        indices.extend_from_slice(&[
-            top_center,
-            ((i + 1) * 2) as u32,
-            (i * 2) as u32,
-        ]);
+        indices.extend_from_slice(&[top_center, ((i + 1) * 2) as u32, (i * 2) as u32]);
     }
 
     let bottom_center = vertices.len() as u32;
     vertices.push([0.0, -half_length, 0.0]);
     for i in 0..CYLINDER_SEGMENTS {
-        indices.extend_from_slice(&[
-            bottom_center,
-            (i * 2 + 1) as u32,
-            ((i + 1) * 2 + 1) as u32,
-        ]);
+        indices.extend_from_slice(&[bottom_center, (i * 2 + 1) as u32, ((i + 1) * 2 + 1) as u32]);
     }
 
     (vertices, indices)

@@ -38,15 +38,15 @@
 //! - [`export`] - Export functionality
 //! - [`utils`] - Utility functions
 
+pub mod camera;
 pub mod core;
+pub mod export;
+pub mod interaction;
 pub mod io;
+pub mod performance;
 pub mod rendering;
 pub mod systems;
-pub mod camera;
-pub mod interaction;
 pub mod ui;
-pub mod export;
-pub mod performance;
 pub mod utils;
 
 use bevy::prelude::*;
@@ -79,7 +79,10 @@ impl Plugin for GumolVizPlugin {
         ui::register(app);
         export::register(app);
 
-        info!("Gumol Viz Engine v{} initialized", env!("CARGO_PKG_VERSION"));
+        info!(
+            "Gumol Viz Engine v{} initialized",
+            env!("CARGO_PKG_VERSION")
+        );
     }
 }
 
@@ -108,12 +111,5 @@ mod tests {
     #[test]
     fn test_version() {
         assert!(!VERSION.is_empty());
-    }
-
-    #[test]
-    fn test_constants() {
-        assert!(MAX_ATOMS > 0);
-        assert!(MAX_FRAMES > 0);
-        assert!(DEFAULT_CAMERA_DISTANCE > 0.0);
     }
 }

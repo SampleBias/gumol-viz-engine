@@ -8,10 +8,7 @@ pub struct HelpOverlay {
     pub visible: bool,
 }
 
-pub fn toggle_help_overlay(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut help: ResMut<HelpOverlay>,
-) {
+pub fn toggle_help_overlay(keyboard: Res<ButtonInput<KeyCode>>, mut help: ResMut<HelpOverlay>) {
     let shift = keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
     if keyboard.just_pressed(KeyCode::Slash) && shift {
         help.visible = !help.visible;
@@ -21,10 +18,7 @@ pub fn toggle_help_overlay(
     }
 }
 
-pub fn help_overlay_ui(
-    mut contexts: bevy_egui::EguiContexts,
-    mut help: ResMut<HelpOverlay>,
-) {
+pub fn help_overlay_ui(mut contexts: bevy_egui::EguiContexts, mut help: ResMut<HelpOverlay>) {
     if !help.visible {
         return;
     }

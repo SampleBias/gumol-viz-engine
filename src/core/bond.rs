@@ -56,7 +56,13 @@ pub struct BondData {
 
 impl BondData {
     /// Create a new bond data structure
-    pub fn new(atom_a_id: u32, atom_b_id: u32, bond_type: BondType, order: BondOrder, length: f32) -> Self {
+    pub fn new(
+        atom_a_id: u32,
+        atom_b_id: u32,
+        bond_type: BondType,
+        order: BondOrder,
+        length: f32,
+    ) -> Self {
         Self {
             atom_a_id,
             atom_b_id,
@@ -70,6 +76,7 @@ impl BondData {
 /// Bond type classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect)]
 #[reflect(Debug, PartialEq, Hash)]
+#[derive(Default)]
 pub enum BondType {
     /// Covalent bond
     Covalent,
@@ -90,14 +97,17 @@ pub enum BondType {
     /// Coordinate bond
     Coordinate,
     /// Unknown bond type
+    #[default]
     Unknown,
 }
 
 /// Bond order (single, double, triple)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect)]
 #[reflect(Debug, PartialEq, Hash)]
+#[derive(Default)]
 pub enum BondOrder {
     /// Single bond
+    #[default]
     Single = 1,
     /// Double bond
     Double = 2,
@@ -105,24 +115,15 @@ pub enum BondOrder {
     Triple = 3,
 }
 
-impl Default for BondType {
-    fn default() -> Self {
-        BondType::Unknown
-    }
-}
-
-impl Default for BondOrder {
-    fn default() -> Self {
-        BondOrder::Single
-    }
-}
-
 /// Bond length lookup table for element pairs (in Angstroms)
 pub struct BondLengths;
 
 impl BondLengths {
     /// Get the typical bond length between two elements
-    pub fn get_length(element_a: crate::core::atom::Element, element_b: crate::core::atom::Element) -> f32 {
+    pub fn get_length(
+        element_a: crate::core::atom::Element,
+        element_b: crate::core::atom::Element,
+    ) -> f32 {
         // Sort elements to ensure consistent lookup
         let (e1, e2) = if (element_a as u32) < (element_b as u32) {
             (element_a, element_b)
@@ -202,10 +203,10 @@ pub fn detect_bonds(
                         };
 
                         bonds.push(BondData::new(
-                            id_a, 
-                            id_b, 
-                            BondType::Covalent, 
-                            order, 
+                            id_a,
+                            id_b,
+                            BondType::Covalent,
+                            order,
                             expected_length,
                         ));
                     }
@@ -220,8 +221,8 @@ pub fn detect_bonds(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::atom::{AtomData, Element};
     use bevy::prelude::Vec3;
-    use crate::core::atom::{Element, AtomData};
 
     #[test]
     fn test_bond_length_lookup() {
@@ -239,12 +240,21 @@ mod tests {
         atoms.insert(1, Vec3::new(1.09, 0.0, 0.0));
 
         let mut atom_data = HashMap::new();
-        atom_data.insert(0, AtomData::new(0, Element::C, 0, "MET".into(), "A".into(), "CA".into()));
-        atom_data.insert(1, AtomData::new(1, Element::H, 0, "MET".into(), "A".into(), "H1".into()));
+        atom_data.insert(
+            0,
+            AtomData::new(0, Element::C, 0, "MET".into(), "A".into(), "CA".into()),
+        );
+        atom_data.insert(
+            1,
+            AtomData::new(1, Element::H, 0, "MET".into(), "A".into(), "H1".into()),
+        );
 
         let bonds = detect_bonds(&atoms, &atom_data, 0.2);
         assert_eq!(bonds.len(), 1);
-        let ids = (bonds[0].atom_a_id.min(bonds[0].atom_b_id), bonds[0].atom_a_id.max(bonds[0].atom_b_id));
+        let ids = (
+            bonds[0].atom_a_id.min(bonds[0].atom_b_id),
+            bonds[0].atom_a_id.max(bonds[0].atom_b_id),
+        );
         assert_eq!(ids, (0, 1));
     }
 }

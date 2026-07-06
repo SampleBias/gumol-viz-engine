@@ -3,13 +3,15 @@
 //! Used when `RenderMode::Wireframe` is active — atoms are hidden and bonds
 //! are drawn as thin unlit lines between connected atom pairs.
 
-use crate::performance::PerformanceSettings;
-use crate::systems::bonds::{resolve_bond_list, BondDetectionConfig};
-use crate::utils::spatial_index::AtomSpatialIndex;
 use crate::core::visualization::VisualizationConfig;
+use crate::performance::PerformanceSettings;
 use crate::rendering::atom_index::InstancedAtomIndex;
-use crate::rendering::instanced::{InstancedAtomEntity, InstancedAtomMesh, InstancedAtomsSpawnedEvent};
+use crate::rendering::instanced::{
+    InstancedAtomEntity, InstancedAtomMesh, InstancedAtomsSpawnedEvent,
+};
+use crate::systems::bonds::{resolve_bond_list, BondDetectionConfig};
 use crate::systems::loading::SimulationData;
+use crate::utils::spatial_index::AtomSpatialIndex;
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy::render::render_asset::RenderAssetUsages;
@@ -73,6 +75,7 @@ fn collect_bond_segments(
 }
 
 /// Spawn wireframe line entity after atoms load (hidden until wireframe mode).
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_wireframe_bonds(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -94,7 +97,15 @@ pub fn spawn_wireframe_bonds(
         return;
     }
 
-    let segments = collect_bond_segments(&sim_data, &HashMap::new(), &index, &instanced, &bond_config, &perf, Some(&spatial_index));
+    let segments = collect_bond_segments(
+        &sim_data,
+        &HashMap::new(),
+        &index,
+        &instanced,
+        &bond_config,
+        &perf,
+        Some(&spatial_index),
+    );
     if segments.is_empty() {
         return;
     }
@@ -123,6 +134,7 @@ pub fn spawn_wireframe_bonds(
 }
 
 /// Rebuild line positions when the timeline moves atoms.
+#[allow(clippy::too_many_arguments)]
 pub fn update_wireframe_bond_positions(
     sim_data: Res<SimulationData>,
     bond_config: Res<BondDetectionConfig>,
@@ -130,9 +142,9 @@ pub fn update_wireframe_bond_positions(
     spatial_index: Res<AtomSpatialIndex>,
     index: Res<InstancedAtomIndex>,
     instanced: Query<(&InstancedAtomEntity, &InstancedAtomMesh)>,
-    mut wireframe_entities: ResMut<WireframeBondEntities>,
+    wireframe_entities: ResMut<WireframeBondEntities>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut mesh_query: Query<&Handle<Mesh>, With<WireframeBonds>>,
+    mesh_query: Query<&Handle<Mesh>, With<WireframeBonds>>,
     timeline: Res<crate::core::trajectory::TimelineState>,
 ) {
     let Some(entity) = wireframe_entities.entity else {
@@ -151,7 +163,15 @@ pub fn update_wireframe_bond_positions(
         return;
     };
 
-    let segments = collect_bond_segments(&sim_data, &HashMap::new(), &index, &instanced, &bond_config, &perf, Some(&spatial_index));
+    let segments = collect_bond_segments(
+        &sim_data,
+        &HashMap::new(),
+        &index,
+        &instanced,
+        &bond_config,
+        &perf,
+        Some(&spatial_index),
+    );
     if segments.is_empty() {
         return;
     }
@@ -164,7 +184,7 @@ pub fn update_wireframe_bond_positions(
 /// Show wireframe lines only in wireframe mode; hide cylinder bonds separately.
 pub fn update_wireframe_visibility(
     viz_config: Res<VisualizationConfig>,
-    mut wireframe_entities: ResMut<WireframeBondEntities>,
+    wireframe_entities: ResMut<WireframeBondEntities>,
     mut visibility_query: Query<&mut Visibility, With<WireframeBonds>>,
 ) {
     if !viz_config.is_changed() {

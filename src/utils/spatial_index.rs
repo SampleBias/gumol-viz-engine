@@ -69,16 +69,8 @@ impl AtomSpatialIndex {
         };
 
         let envelope = AABB::from_corners(
-            [
-                center.x - radius,
-                center.y - radius,
-                center.z - radius,
-            ],
-            [
-                center.x + radius,
-                center.y + radius,
-                center.z + radius,
-            ],
+            [center.x - radius, center.y - radius, center.z - radius],
+            [center.x + radius, center.y + radius, center.z + radius],
         );
 
         tree.locate_in_envelope_intersecting(&envelope)

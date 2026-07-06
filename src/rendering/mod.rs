@@ -60,13 +60,13 @@ pub fn generate_atom_mesh_sphere(radius: f32, latitudes: u32, longitudes: u32) -
             let first = i * (longitudes + 1) + j;
             let second = first + longitudes + 1;
 
-            indices.push(first as u32);
-            indices.push(second as u32);
-            indices.push(first + 1 as u32);
+            indices.push(first);
+            indices.push(second);
+            indices.push(first + 1_u32);
 
-            indices.push(second as u32);
-            indices.push(second + 1 as u32);
-            indices.push(first + 1 as u32);
+            indices.push(second);
+            indices.push(second + 1_u32);
+            indices.push(first + 1_u32);
         }
     }
 
@@ -114,13 +114,13 @@ pub fn generate_bond_mesh(length: f32, radius: f32) -> Mesh {
         let i1 = i * 2;
         let i2 = (i + 1) * 2;
 
-        indices.push(i1 as u32);
-        indices.push(i2 as u32);
-        indices.push(i1 + 1 as u32);
+        indices.push(i1);
+        indices.push(i2);
+        indices.push(i1 + 1_u32);
 
-        indices.push(i2 as u32);
-        indices.push(i2 + 1 as u32);
-        indices.push(i1 + 1 as u32);
+        indices.push(i2);
+        indices.push(i2 + 1_u32);
+        indices.push(i1 + 1_u32);
     }
 
     // Top cap
@@ -130,8 +130,8 @@ pub fn generate_bond_mesh(length: f32, radius: f32) -> Mesh {
 
     for i in 0..segments {
         indices.push(top_center as u32);
-        indices.push(((i + 1) * 2) as u32);
-        indices.push((i * 2) as u32);
+        indices.push((i + 1) * 2);
+        indices.push(i * 2);
     }
 
     // Bottom cap
@@ -141,8 +141,8 @@ pub fn generate_bond_mesh(length: f32, radius: f32) -> Mesh {
 
     for i in 0..segments {
         indices.push(bottom_center as u32);
-        indices.push((i * 2 + 1) as u32);
-        indices.push(((i + 1) * 2 + 1) as u32);
+        indices.push(i * 2 + 1);
+        indices.push((i + 1) * 2 + 1);
     }
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);

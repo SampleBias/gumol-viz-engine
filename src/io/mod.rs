@@ -2,19 +2,19 @@
 //!
 //! This module provides parsers for various molecular file formats.
 
-pub mod xyz;
-pub mod pdb;
-pub mod gro;
 pub mod dcd;
+pub mod gro;
 pub mod mmcif;
-pub mod topology;
+pub mod pdb;
 pub mod streaming;
+pub mod topology;
+pub mod xyz;
 
-use bevy::prelude::*;
-use thiserror::Error;
 use crate::core::atom::AtomData;
 use crate::core::bond::BondData;
+use bevy::prelude::*;
 use std::path::Path;
+use thiserror::Error;
 
 /// Register all IO systems
 pub fn register(app: &mut App) {
@@ -77,7 +77,11 @@ impl FileFormat {
     pub fn is_loadable(&self) -> bool {
         matches!(
             self,
-            FileFormat::XYZ | FileFormat::PDB | FileFormat::GRO | FileFormat::MmCIF | FileFormat::DCD
+            FileFormat::XYZ
+                | FileFormat::PDB
+                | FileFormat::GRO
+                | FileFormat::MmCIF
+                | FileFormat::DCD
         )
     }
 

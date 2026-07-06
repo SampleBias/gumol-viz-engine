@@ -67,7 +67,7 @@ pub fn memory_warning(sim_data: &SimulationData) -> Option<String> {
 mod tests {
     use super::*;
     use bevy::prelude::Vec3;
-    use crate::core::trajectory::Trajectory;
+
     use std::path::PathBuf;
 
     #[test]
@@ -105,7 +105,10 @@ mod tests {
         assert!(memory_warning(&sim).is_some());
     }
 
-    fn synthetic_trajectory_for_test(atom_count: usize, frame_count: usize) -> crate::core::trajectory::Trajectory {
+    fn synthetic_trajectory_for_test(
+        atom_count: usize,
+        frame_count: usize,
+    ) -> crate::core::trajectory::Trajectory {
         let mut trajectory =
             crate::core::trajectory::Trajectory::new(PathBuf::from("big.xyz"), atom_count, 1.0);
         for f in 0..frame_count {

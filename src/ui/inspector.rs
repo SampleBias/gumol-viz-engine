@@ -41,9 +41,8 @@ pub fn inspector_ui(
                     let ids: Vec<u32> = selection.atom_ids().iter().copied().take(20).collect();
 
                     for atom_id in ids {
-                        if let Some((proxy, atom)) = atom_query
-                            .iter()
-                            .find(|(p, _)| p.atom_id == atom_id)
+                        if let Some((proxy, atom)) =
+                            atom_query.iter().find(|(p, _)| p.atom_id == atom_id)
                         {
                             let pos = index
                                 .get_position(atom_id, &instanced)

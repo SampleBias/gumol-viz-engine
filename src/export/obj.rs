@@ -53,7 +53,12 @@ fn write_obj(path: &PathBuf, data: &SceneSnapshot) -> std::io::Result<()> {
     let mut w = BufWriter::new(file);
 
     writeln!(w, "# Gumol Viz Engine - OBJ Export")?;
-    writeln!(w, "# Atoms: {}, Bonds: {}", data.atoms.len(), data.bonds.len())?;
+    writeln!(
+        w,
+        "# Atoms: {}, Bonds: {}",
+        data.atoms.len(),
+        data.bonds.len()
+    )?;
     writeln!(w, "o molecule")?;
 
     let mut vertex_offset: u32 = 1;

@@ -37,8 +37,8 @@ fn test_load_multi_frame_xyz() {
 #[test]
 fn test_xyz_elements_from_string() {
     let content = "3\nwater\nO 0.0 0.0 0.0\nH 0.757 0.0 0.0\nH -0.757 0.0 0.0";
-    let trajectory = XYZParser::parse_string(content, fixture("inline.xyz"))
-        .expect("inline XYZ should parse");
+    let trajectory =
+        XYZParser::parse_string(content, fixture("inline.xyz")).expect("inline XYZ should parse");
     assert_eq!(trajectory.num_atoms, 3);
 
     // Element symbols are recovered when loading through the full pipeline;

@@ -19,7 +19,8 @@ pub struct MmcifParser;
 impl MmcifParser {
     /// Parse an mmCIF file and return trajectory data
     pub fn parse_file(path: &Path) -> IOResult<Trajectory> {
-        let file = File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
+        let file =
+            File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
         let reader = BufReader::new(file);
         Self::parse_reader(reader, path.to_path_buf())
     }
@@ -50,12 +51,12 @@ impl MmcifParser {
         // Parse data into categories and columns
         let mut data = MmcifData::default();
 
-        let mut line_iter = lines.iter().enumerate();
+        let line_iter = lines.iter();
         let mut current_category = String::new();
         let mut current_columns: Vec<String> = Vec::new();
         let mut in_loop = false;
 
-        while let Some((_line_num, line)) = line_iter.next() {
+        for line in line_iter {
             let line = line.trim();
 
             // Skip comments and empty lines
@@ -65,7 +66,9 @@ impl MmcifParser {
 
             // Data block start
             if line.starts_with("data_") {
-                data.id = line[5..].to_string();
+                if let Some(id) = line.strip_prefix("data_") {
+                    data.id = id.to_string();
+                }
                 continue;
             }
 
@@ -91,10 +94,8 @@ impl MmcifParser {
                         } else if current_category != category {
                             // New category, start a new block
                             if !current_columns.is_empty() {
-                                data.categories.insert(
-                                    current_category.clone(),
-                                    current_columns.clone(),
-                                );
+                                data.categories
+                                    .insert(current_category.clone(), current_columns.clone());
                             }
                             current_category = category.to_string();
                             current_columns.clear();
@@ -106,12 +107,13 @@ impl MmcifParser {
                 }
 
                 // Check if this is a data line (not another _ or loop_)
-                if !line.starts_with('_') && !line.starts_with("loop_") && !line.starts_with("data_") {
+                if !line.starts_with('_')
+                    && !line.starts_with("loop_")
+                    && !line.starts_with("data_")
+                {
                     // This is data for the current loop
-                    let values: Vec<String> = line
-                        .split_whitespace()
-                        .map(|s| s.to_string())
-                        .collect();
+                    let values: Vec<String> =
+                        line.split_whitespace().map(|s| s.to_string()).collect();
 
                     if current_category != "atom_site" {
                         // We only care about atom_site for now
@@ -133,7 +135,8 @@ impl MmcifParser {
                 // End of loop
                 in_loop = false;
                 if !current_columns.is_empty() && !current_category.is_empty() {
-                    data.categories.insert(current_category.clone(), current_columns.clone());
+                    data.categories
+                        .insert(current_category.clone(), current_columns.clone());
                 }
                 continue;
             }
@@ -153,7 +156,8 @@ impl MmcifParser {
 
         // End of file - save any remaining loop data
         if !current_columns.is_empty() && !current_category.is_empty() {
-            data.categories.insert(current_category.clone(), current_columns);
+            data.categories
+                .insert(current_category.clone(), current_columns);
         }
 
         // Extract metadata
@@ -209,7 +213,8 @@ impl MmcifParser {
     /// Parse atom metadata from an mmCIF file and return AtomData for each atom.
     /// Used by the loading system to populate atom_data when loading mmCIF files.
     pub fn parse_atom_data_from_file(path: &Path) -> IOResult<Vec<AtomData>> {
-        let file = File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
+        let file =
+            File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
         let reader = BufReader::new(file);
         let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
 
@@ -259,19 +264,21 @@ impl MmcifParser {
     /// Parse mmCIF data structure from lines (extracts atom_site and metadata)
     fn parse_mmcif_data(lines: &[String]) -> IOResult<MmcifData> {
         let mut data = MmcifData::default();
-        let mut line_iter = lines.iter().enumerate();
+        let line_iter = lines.iter();
         let mut current_category = String::new();
         let mut current_columns: Vec<String> = Vec::new();
         let mut in_loop = false;
 
-        while let Some((_line_num, line)) = line_iter.next() {
+        for line in line_iter {
             let line = line.trim();
 
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
             if line.starts_with("data_") {
-                data.id = line[5..].to_string();
+                if let Some(id) = line.strip_prefix("data_") {
+                    data.id = id.to_string();
+                }
                 continue;
             }
             if line.starts_with("loop_") {
@@ -291,10 +298,8 @@ impl MmcifParser {
                             current_category = category.to_string();
                         } else if current_category != category {
                             if !current_columns.is_empty() {
-                                data.categories.insert(
-                                    current_category.clone(),
-                                    current_columns.clone(),
-                                );
+                                data.categories
+                                    .insert(current_category.clone(), current_columns.clone());
                             }
                             current_category = category.to_string();
                             current_columns.clear();
@@ -304,12 +309,13 @@ impl MmcifParser {
                     continue;
                 }
 
-                if !line.starts_with('_') && !line.starts_with("loop_") && !line.starts_with("data_") {
+                if !line.starts_with('_')
+                    && !line.starts_with("loop_")
+                    && !line.starts_with("data_")
+                {
                     if current_category == "atom_site" {
-                        let values: Vec<String> = line
-                            .split_whitespace()
-                            .map(|s| s.to_string())
-                            .collect();
+                        let values: Vec<String> =
+                            line.split_whitespace().map(|s| s.to_string()).collect();
 
                         let mut record: HashMap<String, String> = HashMap::new();
                         for (i, value) in values.iter().enumerate() {
@@ -324,7 +330,8 @@ impl MmcifParser {
 
                 in_loop = false;
                 if !current_columns.is_empty() && !current_category.is_empty() {
-                    data.categories.insert(current_category.clone(), current_columns.clone());
+                    data.categories
+                        .insert(current_category.clone(), current_columns.clone());
                 }
                 continue;
             }
@@ -341,7 +348,8 @@ impl MmcifParser {
         }
 
         if !current_columns.is_empty() && !current_category.is_empty() {
-            data.categories.insert(current_category.clone(), current_columns);
+            data.categories
+                .insert(current_category.clone(), current_columns);
         }
 
         Ok(data)
@@ -423,11 +431,7 @@ impl MmcifWriter {
         // Write metadata
         writeln!(writer, "#")?;
         writeln!(writer, "_entry.id {}", file_path_to_id(path))?;
-        writeln!(
-            writer,
-            "_struct.title {}",
-            trajectory.metadata.title
-        )?;
+        writeln!(writer, "_struct.title {}", trajectory.metadata.title)?;
 
         // Write atom_site loop header
         writeln!(writer, "#")?;

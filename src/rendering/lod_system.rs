@@ -13,11 +13,7 @@ pub fn update_instanced_lod_meshes(
     mut mesh_pool: ResMut<AtomMeshPool>,
     mut meshes: ResMut<Assets<Mesh>>,
     camera: Query<(&Camera, &GlobalTransform, &Projection)>,
-    mut instanced: Query<(
-        &InstancedAtomEntity,
-        &mut Handle<Mesh>,
-        &InstancedAtomMesh,
-    )>,
+    mut instanced: Query<(&InstancedAtomEntity, &mut Handle<Mesh>, &InstancedAtomMesh)>,
 ) {
     if !perf.lod_enabled {
         diagnostics.current_lod = AtomLod::High;

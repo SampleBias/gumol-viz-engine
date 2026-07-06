@@ -4,7 +4,9 @@ use crate::core::molecule::SecondaryStructure;
 use crate::core::secondary_structure::{BackboneResidue, ProteinBackbone};
 use crate::core::visualization::{ColorPalette, RenderMode, VisualizationConfig};
 use crate::rendering::atom_index::InstancedAtomIndex;
-use crate::rendering::instanced::{InstancedAtomEntity, InstancedAtomMesh, InstancedAtomsSpawnedEvent};
+use crate::rendering::instanced::{
+    InstancedAtomEntity, InstancedAtomMesh, InstancedAtomsSpawnedEvent,
+};
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy::render::render_asset::RenderAssetUsages;
@@ -37,10 +39,8 @@ pub fn build_backbone_on_load(
     }
 
     let positions = index.collect_positions(&instanced);
-    *backbone = crate::core::secondary_structure::build_protein_backbone(
-        &sim_data.atom_data,
-        &positions,
-    );
+    *backbone =
+        crate::core::secondary_structure::build_protein_backbone(&sim_data.atom_data, &positions);
 
     if backbone.cartoon_available {
         info!(
@@ -91,16 +91,19 @@ pub fn spawn_ribbon_on_load(
         .id();
 
     ribbon_entities.entities.push(entity);
-    info!("Spawned protein ribbon mesh ({} residues)", backbone.residues.len());
+    info!(
+        "Spawned protein ribbon mesh ({} residues)",
+        backbone.residues.len()
+    );
 }
 
 /// Rebuild ribbon geometry when render mode switches between cartoon/tube/trace.
 pub fn update_ribbon_for_mode(
     viz_config: Res<VisualizationConfig>,
     backbone: Res<ProteinBackbone>,
-    mut ribbon_entities: ResMut<RibbonEntities>,
+    ribbon_entities: ResMut<RibbonEntities>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut mesh_query: Query<&Handle<Mesh>, With<ProteinRibbon>>,
+    mesh_query: Query<&Handle<Mesh>, With<ProteinRibbon>>,
 ) {
     if !viz_config.is_changed() || ribbon_entities.entities.is_empty() {
         return;
@@ -126,15 +129,16 @@ pub fn update_ribbon_for_mode(
 }
 
 /// Update ribbon positions when timeline advances.
+#[allow(clippy::too_many_arguments)]
 pub fn update_ribbon_positions(
     backbone: Res<ProteinBackbone>,
     index: Res<InstancedAtomIndex>,
     viz_config: Res<VisualizationConfig>,
     timeline: Res<crate::core::trajectory::TimelineState>,
     instanced: Query<(&InstancedAtomEntity, &InstancedAtomMesh)>,
-    mut ribbon_entities: ResMut<RibbonEntities>,
+    ribbon_entities: ResMut<RibbonEntities>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut mesh_query: Query<&Handle<Mesh>, With<ProteinRibbon>>,
+    mesh_query: Query<&Handle<Mesh>, With<ProteinRibbon>>,
 ) {
     if ribbon_entities.entities.is_empty() || !backbone.cartoon_available {
         return;
@@ -272,10 +276,7 @@ pub fn build_ribbon_mesh(residues: &[BackboneResidue], mode: RenderMode) -> Mesh
 
 fn build_trace_mesh(spline: &[Vec3], residues: &[BackboneResidue]) -> Mesh {
     let vertex_count = spline.len();
-    let positions: Vec<[f32; 3]> = spline
-        .iter()
-        .map(|p| [p.x, p.y, p.z])
-        .collect();
+    let positions: Vec<[f32; 3]> = spline.iter().map(|p| [p.x, p.y, p.z]).collect();
     let indices: Vec<u32> = (0..positions.len() as u32).collect();
 
     let mut mesh = Mesh::new(PrimitiveTopology::LineStrip, RENDER_ASSET_USAGES);
@@ -287,7 +288,15 @@ fn build_trace_mesh(spline: &[Vec3], residues: &[BackboneResidue]) -> Mesh {
     } else {
         residue_color(&residues[0])
     };
-    let colors = vec![[color.to_srgba().red, color.to_srgba().green, color.to_srgba().blue, color.to_srgba().alpha]; vertex_count];
+    let colors = vec![
+        [
+            color.to_srgba().red,
+            color.to_srgba().green,
+            color.to_srgba().blue,
+            color.to_srgba().alpha
+        ];
+        vertex_count
+    ];
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
     mesh
 }
@@ -326,8 +335,10 @@ fn build_tube_or_cartoon_mesh(
         let ss = residues[residue_idx].secondary_structure;
         let width = ribbon_width(ss, mode);
         let height = if mode == RenderMode::Cartoon
-            && matches!(ss, SecondaryStructure::BetaStrand | SecondaryStructure::BetaSheet)
-        {
+            && matches!(
+                ss,
+                SecondaryStructure::BetaStrand | SecondaryStructure::BetaSheet
+            ) {
             width * 0.25
         } else {
             width

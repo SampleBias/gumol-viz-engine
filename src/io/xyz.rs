@@ -20,7 +20,8 @@ pub struct XYZParser;
 impl XYZParser {
     /// Parse an XYZ file and return trajectory data
     pub fn parse_file(path: &Path) -> IOResult<Trajectory> {
-        let file = File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
+        let file =
+            File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
         let reader = BufReader::new(file);
         Self::parse_reader(reader, path.to_path_buf())
     }
@@ -57,12 +58,10 @@ impl XYZParser {
 
             // Parse number of atoms
             if frame_index == 0 {
-                num_atoms = line
-                    .parse::<usize>()
-                    .map_err(|_| IOError::ParseError {
-                        line: line_num,
-                        message: format!("Expected number of atoms, got: {}", line),
-                    })?;
+                num_atoms = line.parse::<usize>().map_err(|_| IOError::ParseError {
+                    line: line_num,
+                    message: format!("Expected number of atoms, got: {}", line),
+                })?;
             } else {
                 let current_num_atoms = line.parse::<usize>().map_err(|_| IOError::ParseError {
                     line: line_num,
@@ -122,24 +121,18 @@ impl XYZParser {
                     });
 
                     // Parse position
-                    let x = parts[1]
-                        .parse::<f32>()
-                        .map_err(|_| IOError::ParseError {
-                            line: atom_line_num,
-                            message: format!("Invalid X coordinate: {}", parts[1]),
-                        })?;
-                    let y = parts[2]
-                        .parse::<f32>()
-                        .map_err(|_| IOError::ParseError {
-                            line: atom_line_num,
-                            message: format!("Invalid Y coordinate: {}", parts[2]),
-                        })?;
-                    let z = parts[3]
-                        .parse::<f32>()
-                        .map_err(|_| IOError::ParseError {
-                            line: atom_line_num,
-                            message: format!("Invalid Z coordinate: {}", parts[3]),
-                        })?;
+                    let x = parts[1].parse::<f32>().map_err(|_| IOError::ParseError {
+                        line: atom_line_num,
+                        message: format!("Invalid X coordinate: {}", parts[1]),
+                    })?;
+                    let y = parts[2].parse::<f32>().map_err(|_| IOError::ParseError {
+                        line: atom_line_num,
+                        message: format!("Invalid Y coordinate: {}", parts[2]),
+                    })?;
+                    let z = parts[3].parse::<f32>().map_err(|_| IOError::ParseError {
+                        line: atom_line_num,
+                        message: format!("Invalid Z coordinate: {}", parts[3]),
+                    })?;
 
                     let position = Vec3::new(x, y, z);
 
@@ -151,9 +144,9 @@ impl XYZParser {
                         let atom_data = AtomData::new(
                             i as u32,
                             element,
-                            0, // residue ID
+                            0,                 // residue ID
                             "UNK".to_string(), // residue name
-                            "A".to_string(),    // chain ID
+                            "A".to_string(),   // chain ID
                             element.symbol().to_string(),
                         );
                         atom_data_map.insert(i as u32, atom_data);
@@ -191,10 +184,11 @@ impl XYZParser {
 
     /// Stream frames from a large XYZ file (memory-efficient)
     pub fn stream_frames(path: &Path) -> IOResult<FrameStream> {
-        let file = File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
+        let file =
+            File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
         Ok(FrameStream {
             reader: BufReader::new(file),
-            file_path: path.to_path_buf(),
+            _file_path: path.to_path_buf(),
             current_frame: 0,
             num_atoms: 0,
             time_step: 1.0,
@@ -205,7 +199,7 @@ impl XYZParser {
 /// Stream frames from an XYZ file
 pub struct FrameStream {
     reader: BufReader<File>,
-    file_path: PathBuf,
+    _file_path: PathBuf,
     current_frame: usize,
     num_atoms: usize,
     time_step: f32,
@@ -237,7 +231,10 @@ impl FrameStream {
         self.reader.read_line(&mut line)?;
 
         // Parse atoms
-        let mut frame = FrameData::new(self.current_frame, self.current_frame as f32 * self.time_step);
+        let mut frame = FrameData::new(
+            self.current_frame,
+            self.current_frame as f32 * self.time_step,
+        );
 
         for i in 0..num_atoms {
             line.clear();
@@ -289,8 +286,6 @@ impl XYZWriter {
 
     /// Write a single frame to XYZ format
     pub fn write_frame<W: std::io::Write>(writer: &mut W, frame: &FrameData) -> IOResult<()> {
-        use std::io::Write;
-
         // Write number of atoms
         writeln!(writer, "{}", frame.positions.len())?;
 
@@ -328,10 +323,7 @@ O 0.0 0.0 0.0
 H 0.757 0.0 0.0
 H -0.757 0.0 0.0"#;
 
-        let result = XYZParser::parse_string(
-            xyz_content,
-            PathBuf::from("test.xyz"),
-        );
+        let result = XYZParser::parse_string(xyz_content, PathBuf::from("test.xyz"));
 
         assert!(result.is_ok());
         let trajectory = result.unwrap();
@@ -350,10 +342,7 @@ frame 1
 X 0.1 0.0 0.0
 X 1.1 0.0 0.0"#;
 
-        let result = XYZParser::parse_string(
-            xyz_content,
-            PathBuf::from("test.xyz"),
-        );
+        let result = XYZParser::parse_string(xyz_content, PathBuf::from("test.xyz"));
 
         assert!(result.is_ok());
         let trajectory = result.unwrap();

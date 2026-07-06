@@ -3,8 +3,8 @@
 //! This test module verifies that GRO files can be loaded
 //! via the file loading system.
 
-use gumol_viz_engine::io::{FileFormat, IOResult};
 use gumol_viz_engine::io::gro::GroParser;
+use gumol_viz_engine::io::FileFormat;
 use std::path::Path;
 
 #[test]
@@ -12,7 +12,7 @@ fn test_gro_file_load_via_file_format_detection() {
     // Test that FileFormat detects .gro files correctly
     let path = Path::new("examples/water.gro");
     assert_eq!(FileFormat::from_path(path), FileFormat::GRO);
-    assert_eq!(FileFormat::is_loadable(&FileFormat::GRO), true);
+    assert!(FileFormat::is_loadable(&FileFormat::GRO));
 }
 
 #[test]
@@ -37,7 +37,10 @@ fn test_load_actual_gro_file() {
     assert_eq!(trajectory.num_atoms, 3, "Should have 3 atoms");
 
     // Verify metadata
-    assert!(trajectory.metadata.title.contains("Water"), "Title should contain 'Water'");
+    assert!(
+        trajectory.metadata.title.contains("Water"),
+        "Title should contain 'Water'"
+    );
     assert_eq!(trajectory.metadata.software, "GROMACS");
 
     // Get frame data
@@ -73,7 +76,12 @@ fn test_load_actual_gro_file() {
 
 #[test]
 fn test_gro_format_from_content_detection() {
-    let gro_content = "Water\n    3\n    1SOL    OW    1   0.126   0.639   0.322   0.0001   0.0002   0.0003";
+    let gro_content =
+        "Water\n    3\n    1SOL    OW    1   0.126   0.639   0.322   0.0001   0.0002   0.0003";
     let format = FileFormat::from_content(gro_content);
-    assert_eq!(format, FileFormat::GRO, "Should detect GRO format from content");
+    assert_eq!(
+        format,
+        FileFormat::GRO,
+        "Should detect GRO format from content"
+    );
 }

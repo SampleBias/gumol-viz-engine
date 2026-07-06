@@ -84,6 +84,7 @@ impl AtomData {
 /// Chemical element enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect)]
 #[reflect(Debug, PartialEq, Hash)]
+#[derive(Default)]
 pub enum Element {
     // Period 1
     H,
@@ -196,13 +197,8 @@ pub enum Element {
     No,
     Lr,
     /// Unknown or custom element
+    #[default]
     Unknown,
-}
-
-impl Default for Element {
-    fn default() -> Self {
-        Element::Unknown
-    }
 }
 
 impl Element {
@@ -356,33 +352,33 @@ impl Element {
     /// Get the CPK (Corey-Pauling-Koltun) color for this element
     pub fn cpk_color(&self) -> [f32; 3] {
         match self {
-            Element::H => [0.9, 0.9, 0.9],    // white
-            Element::C => [0.2, 0.2, 0.2],    // gray
-            Element::N => [0.1, 0.1, 0.8],    // blue
-            Element::O => [0.8, 0.1, 0.1],    // red
-            Element::F => [0.5, 0.8, 0.5],    // light green
-            Element::P => [0.8, 0.5, 0.1],    // orange
-            Element::S => [0.8, 0.8, 0.1],    // yellow
-            Element::Cl => [0.1, 0.8, 0.1],   // green
-            Element::Br => [0.5, 0.2, 0.2],   // dark red
-            Element::I => [0.4, 0.1, 0.4],    // purple
-            Element::He => [0.9, 0.0, 0.9],   // magenta
-            Element::Li => [0.7, 0.0, 0.7],   // dark purple
-            Element::Be => [0.5, 0.5, 0.5],   // light gray
-            Element::B => [1.0, 0.7, 0.7],    // pink
-            Element::Na => [0.5, 0.5, 0.5],   // light gray
-            Element::Mg => [0.0, 0.0, 0.0],   // black
-            Element::Al => [0.5, 0.5, 0.5],   // light gray
-            Element::Si => [0.9, 0.7, 0.5],   // light brown
-            Element::K => [0.5, 0.5, 0.5],    // light gray
-            Element::Ca => [0.2, 0.8, 0.2],  // light green
-            Element::Ti => [0.6, 0.6, 0.6],  // medium gray
-            Element::Fe => [0.8, 0.2, 0.2],   // dark red
-            Element::Cu => [0.7, 0.4, 0.2],   // brown
-            Element::Zn => [0.4, 0.5, 0.4],   // dark green
-            Element::Ag => [0.7, 0.7, 0.7],   // silver
-            Element::Au => [0.8, 0.7, 0.2],   // gold
-            _ => [0.5, 0.5, 0.5],             // gray (default)
+            Element::H => [0.9, 0.9, 0.9],  // white
+            Element::C => [0.2, 0.2, 0.2],  // gray
+            Element::N => [0.1, 0.1, 0.8],  // blue
+            Element::O => [0.8, 0.1, 0.1],  // red
+            Element::F => [0.5, 0.8, 0.5],  // light green
+            Element::P => [0.8, 0.5, 0.1],  // orange
+            Element::S => [0.8, 0.8, 0.1],  // yellow
+            Element::Cl => [0.1, 0.8, 0.1], // green
+            Element::Br => [0.5, 0.2, 0.2], // dark red
+            Element::I => [0.4, 0.1, 0.4],  // purple
+            Element::He => [0.9, 0.0, 0.9], // magenta
+            Element::Li => [0.7, 0.0, 0.7], // dark purple
+            Element::Be => [0.5, 0.5, 0.5], // light gray
+            Element::B => [1.0, 0.7, 0.7],  // pink
+            Element::Na => [0.5, 0.5, 0.5], // light gray
+            Element::Mg => [0.0, 0.0, 0.0], // black
+            Element::Al => [0.5, 0.5, 0.5], // light gray
+            Element::Si => [0.9, 0.7, 0.5], // light brown
+            Element::K => [0.5, 0.5, 0.5],  // light gray
+            Element::Ca => [0.2, 0.8, 0.2], // light green
+            Element::Ti => [0.6, 0.6, 0.6], // medium gray
+            Element::Fe => [0.8, 0.2, 0.2], // dark red
+            Element::Cu => [0.7, 0.4, 0.2], // brown
+            Element::Zn => [0.4, 0.5, 0.4], // dark green
+            Element::Ag => [0.7, 0.7, 0.7], // silver
+            Element::Au => [0.8, 0.7, 0.2], // gold
+            _ => [0.5, 0.5, 0.5],           // gray (default)
         }
     }
 
@@ -664,7 +660,7 @@ impl Element {
                 return elem;
             }
         }
-        if name.len() >= 1 {
+        if !name.is_empty() {
             if let Ok(elem) = Element::from_symbol(&name[..1]) {
                 return elem;
             }

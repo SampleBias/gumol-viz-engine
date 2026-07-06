@@ -19,7 +19,11 @@ pub fn cull_instanced_atoms(
 ) {
     let mode_scale = viz.render_mode.atom_scale() * viz.atom_scale;
     let show_atoms = viz.show_atoms && viz.render_mode.shows_atoms();
-    let base_scale = if show_atoms { mode_scale.max(0.001) } else { 0.0 };
+    let base_scale = if show_atoms {
+        mode_scale.max(0.001)
+    } else {
+        0.0
+    };
 
     let Ok((camera, transform, projection)) = camera.get_single() else {
         return;

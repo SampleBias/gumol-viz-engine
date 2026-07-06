@@ -301,7 +301,10 @@ pub fn calculate_rmsd(frame_a: &FrameData, frame_b: &FrameData, atom_ids: &[u32]
     let mut count = 0;
 
     for atom_id in atom_ids {
-        if let (Some(pos_a), Some(pos_b)) = (frame_a.get_position(*atom_id), frame_b.get_position(*atom_id)) {
+        if let (Some(pos_a), Some(pos_b)) = (
+            frame_a.get_position(*atom_id),
+            frame_b.get_position(*atom_id),
+        ) {
             let diff = pos_a - pos_b;
             sum_sq_diff += diff.length_squared();
             count += 1;
@@ -340,10 +343,7 @@ mod tests {
         let interpolated = interpolate_frames(&frame_a, &frame_b, 0.5);
         assert_eq!(interpolated.index, 0);
         assert_eq!(interpolated.time, 0.5);
-        assert_eq!(
-            interpolated.get_position(0),
-            Some(Vec3::new(0.5, 0.0, 0.0))
-        );
+        assert_eq!(interpolated.get_position(0), Some(Vec3::new(0.5, 0.0, 0.0)));
     }
 
     #[test]

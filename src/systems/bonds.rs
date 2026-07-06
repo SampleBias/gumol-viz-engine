@@ -6,11 +6,11 @@
 use crate::core::atom::{AtomData, Element};
 use crate::core::bond::{Bond, BondData, BondOrder, BondType};
 use crate::core::visualization::VisualizationConfig;
-use crate::rendering;
 use crate::performance::PerformanceSettings;
+use crate::rendering;
 use crate::rendering::atom_index::InstancedAtomIndex;
-use crate::utils::spatial_index::AtomSpatialIndex;
 use crate::rendering::instanced::{InstancedAtomEntity, InstancedAtomMesh};
+use crate::utils::spatial_index::AtomSpatialIndex;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
@@ -196,8 +196,7 @@ fn detect_bonds_spatial(
     spatial_index: &AtomSpatialIndex,
 ) -> Vec<BondData> {
     let mut bonds = Vec::new();
-    let atom_map: HashMap<u32, &AtomData> =
-        sim_data.atom_data.iter().map(|a| (a.id, a)).collect();
+    let atom_map: HashMap<u32, &AtomData> = sim_data.atom_data.iter().map(|a| (a.id, a)).collect();
 
     for atom in &sim_data.atom_data {
         let Some(pos_a) = positions.get(&atom.id) else {
@@ -258,7 +257,8 @@ fn detect_bonds_from_distance(
 fn dedupe_bonds(bonds: Vec<BondData>) -> Vec<BondData> {
     let mut seen = HashMap::new();
     for bond in bonds {
-        seen.entry(bond_key(bond.atom_a_id, bond.atom_b_id)).or_insert(bond);
+        seen.entry(bond_key(bond.atom_a_id, bond.atom_b_id))
+            .or_insert(bond);
     }
     seen.into_values().collect()
 }
@@ -281,12 +281,17 @@ pub fn resolve_bond_list(
     };
     let elapsed_ms = start.elapsed().as_secs_f32() * 1000.0;
     if elapsed_ms > 1.0 {
-        debug!("Bond detection took {:.1} ms ({} bonds)", elapsed_ms, bonds.len());
+        debug!(
+            "Bond detection took {:.1} ms ({} bonds)",
+            elapsed_ms,
+            bonds.len()
+        );
     }
     dedupe_bonds(bonds)
 }
 
 /// Spawn bond cylinders after instanced atoms are ready.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_bonds(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -379,9 +384,10 @@ pub fn spawn_bonds(
             ))
             .id();
 
-        bond_entities
-            .entities
-            .insert(bond_key(bond_data.atom_a_id, bond_data.atom_b_id), bond_entity);
+        bond_entities.entities.insert(
+            bond_key(bond_data.atom_a_id, bond_data.atom_b_id),
+            bond_entity,
+        );
     }
 
     info!("Spawned {} bond entities", bond_entities.entities.len());
@@ -533,16 +539,7 @@ mod tests {
         };
         let config = BondDetectionConfig::default();
         let atoms: Vec<AtomData> = (0..200)
-            .map(|i| {
-                AtomData::new(
-                    i,
-                    Element::C,
-                    0,
-                    "UNK".into(),
-                    "A".into(),
-                    format!("C{i}"),
-                )
-            })
+            .map(|i| AtomData::new(i, Element::C, 0, "UNK".into(), "A".into(), format!("C{i}")))
             .collect();
         let positions: HashMap<u32, Vec3> = atoms
             .iter()

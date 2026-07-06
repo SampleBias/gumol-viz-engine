@@ -8,10 +8,7 @@ use bevy::prelude::*;
 use bevy_panorbit_camera::PanOrbitCamera;
 
 pub fn register(app: &mut App) {
-    app.add_systems(Update, (
-        focus_on_molecule_key,
-        focus_on_selection_key,
-    ));
+    app.add_systems(Update, (focus_on_molecule_key, focus_on_selection_key));
     info!("Camera module registered");
 }
 

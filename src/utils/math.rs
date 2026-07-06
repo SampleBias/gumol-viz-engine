@@ -1,7 +1,7 @@
 //! Math utility functions for molecular dynamics
 
 use bevy::prelude::*;
-use nalgebra::{Vector3, Matrix3};
+use nalgebra::{Matrix3, Vector3};
 use std::f32::consts::PI;
 
 /// Apply periodic boundary conditions to a position
@@ -86,14 +86,20 @@ pub fn kabsch_rotation(coords_a: &[Vec3], coords_b: &[Vec3]) -> Option<Matrix3<f
     let center_b = center_of_mass(coords_b, &masses);
 
     // Center the coordinates
-    let centered_a: Vec<Vector3<f32>> = coords_a.iter().map(|p| {
-        let diff = *p - center_a;
-        Vector3::new(diff.x, diff.y, diff.z)
-    }).collect();
-    let centered_b: Vec<Vector3<f32>> = coords_b.iter().map(|p| {
-        let diff = *p - center_b;
-        Vector3::new(diff.x, diff.y, diff.z)
-    }).collect();
+    let centered_a: Vec<Vector3<f32>> = coords_a
+        .iter()
+        .map(|p| {
+            let diff = *p - center_a;
+            Vector3::new(diff.x, diff.y, diff.z)
+        })
+        .collect();
+    let centered_b: Vec<Vector3<f32>> = coords_b
+        .iter()
+        .map(|p| {
+            let diff = *p - center_b;
+            Vector3::new(diff.x, diff.y, diff.z)
+        })
+        .collect();
 
     // Compute covariance matrix
     let mut cov = Matrix3::zeros();
@@ -135,10 +141,18 @@ pub fn spline_interpolation(frames: &[Vec<Vec3>], frame_index: usize, t: f32) ->
         return frames.last().unwrap().clone();
     }
 
-    let pos_prev = if frame_index > 0 { frames[frame_index - 1].clone() } else { frames[frame_index].clone() };
+    let pos_prev = if frame_index > 0 {
+        frames[frame_index - 1].clone()
+    } else {
+        frames[frame_index].clone()
+    };
     let pos_curr = frames[frame_index].clone();
     let pos_next = frames[frame_index + 1].clone();
-    let pos_next_next = if frame_index + 2 < frames.len() { frames[frame_index + 2].clone() } else { frames[frame_index + 1].clone() };
+    let pos_next_next = if frame_index + 2 < frames.len() {
+        frames[frame_index + 2].clone()
+    } else {
+        frames[frame_index + 1].clone()
+    };
 
     pos_curr
         .iter()
@@ -146,16 +160,20 @@ pub fn spline_interpolation(frames: &[Vec<Vec3>], frame_index: usize, t: f32) ->
         .enumerate()
         .map(|(i, (a, b))| {
             let pa = if i < pos_prev.len() { pos_prev[i] } else { *a };
-            let pb = if i < pos_next_next.len() { pos_next_next[i] } else { *b };
+            let pb = if i < pos_next_next.len() {
+                pos_next_next[i]
+            } else {
+                *b
+            };
 
             let t2 = t * t;
             let t3 = t2 * t;
 
             // Catmull-Rom spline
             0.5 * ((2.0 * *a)
-                 + (-pa + *b) * t
-                 + (2.0 * pa - 5.0 * *a + 4.0 * *b - pb) * t2
-                 + (-pa + 3.0 * *a - 3.0 * *b + pb) * t3)
+                + (-pa + *b) * t
+                + (2.0 * pa - 5.0 * *a + 4.0 * *b - pb) * t2
+                + (-pa + 3.0 * *a - 3.0 * *b + pb) * t3)
         })
         .collect()
 }
