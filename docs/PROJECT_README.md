@@ -5,7 +5,7 @@ A high-performance Rust-based visualization engine for Molecular Dynamics (MD) s
 
 ## Architecture Overview
 - **Project Type**: Scientific Visualization / Molecular Dynamics
-- **Development Status**: Early Development - Foundation complete, systems implementation needed
+- **Development Status**: Active development — core pipeline complete, polish and advanced features in progress
 - **Development Framework**: Bevy 0.14 ECS (Entity-Component-System)
 - **Context Tracking**: Integrated with Vybrid development workflow
 
@@ -16,96 +16,118 @@ A high-performance Rust-based visualization engine for Molecular Dynamics (MD) s
 - **3D Interaction**: bevy_mod_picking 0.20, bevy_panorbit_camera 0.19
 - **Math**: nalgebra 0.33
 - **Parsing**: nom 7.1 (parser combinators)
-- **Parallel Processing**: rayon 1.10
+- **Spatial Indexing**: rstar 0.12 (bond detection)
+- **Parallel Processing**: rayon 1.10 (dependency present; parallel parse not wired)
 - **Error Handling**: thiserror 1.0, anyhow 1.0
 
 ## Project Structure
 ```
 gumol-viz-engine/
 ├── src/
-│   ├── core/           # Core data structures (atom, bond, molecule, trajectory)
-│   ├── io/             # File format parsers (xyz.rs, pdb.rs implemented)
-│   ├── rendering/      # Rendering systems (mesh generation)
-│   ├── systems/        # Bevy ECS systems (stubs, needs implementation)
-│   ├── camera/         # Camera controls (stubs)
-│   ├── interaction/    # User interaction (stubs)
-│   ├── ui/             # EGUI systems (stubs)
-│   ├── export/         # Export functionality (stubs)
-│   └── utils/          # Utility functions (geometry, colors, math)
-├── examples/           # Example applications
-├── docs/               # Documentation (DEVELOPMENT_PLAN.md, ARCHITECTURE.md, etc.)
+│   ├── core/           # Atom, bond, molecule, trajectory, visualization types
+│   ├── io/             # XYZ, PDB, GRO, DCD, mmCIF parsers + streaming
+│   ├── rendering/      # Instanced rendering, LOD, culling, wireframe, ribbon, GPU interpolation
+│   ├── systems/        # Loading, timeline, bonds, visualization, frame cache
+│   ├── performance/    # PerformanceSettings, diagnostics, memory budgeting
+│   ├── camera/         # Focus-on-molecule / focus-on-selection
+│   ├── interaction/    # Selection, measurements, pick proxies
+│   ├── ui/             # EGUI panels, inspector, help, notifications
+│   ├── export/         # Screenshot, OBJ, glTF
+│   └── utils/          # Geometry, colors, math, spatial index
+├── examples/           # basic_load, xyz_viewer, pdb_viewer
+├── tests/              # Integration tests per format + load pipeline
+├── benches/            # Parsing, rendering, bonds, loading benchmarks
+├── docs/               # Architecture, plans, profiling guides
 └── tasks/              # Development task tracking
 ```
 
 ## Current Implementation Status
 
-### ✅ Completed Features
-- **Core Data Structures**: Complete implementations of Atom, Element, Bond, Molecule, Trajectory, FrameData, TimelineState
-- **XYZ Parser**: Fully functional with streaming support for large files
-- **PDB Parser**: Complete with ATOM, HETATM, CONECT record parsing
-- **Secondary Parsers**: GRO, DCD, and mmCIF formats fully implemented
-- **Element System**: All 118 elements with CPK colors, van der Waals radii, atomic masses
-- **Mesh Generation**: Basic sphere (atom) and cylinder (bond) mesh generation
-- **Bevy Plugin Structure**: GumolVizPlugin with module registration
-- **File Loading System**: Complete event-driven loading system with CLI, drag-drop, and file picker support
-- **Atom Spawning System**: Entity spawning from trajectory data with position updates and picking support
-- **Timeline & Animation**: Complete playback system with interpolation, speed control, keyboard/UI controls
-- **UI System**: EGUI-based interface with file loading, status display, timeline controls, and selection info
-- **Atom Selection**: Complete selection system with raycasting, highlighting, and multi-select support
-- **Bond Detection**: Distance-based bond detection with automatic spawning
-- **Visualization Modes**: CPK, Ball-and-Stick, Licorice, Wireframe, Surface, Cartoon, Tube, Trace, Points
-- **Export Systems**: Screenshot, OBJ, and glTF export functionality
+### ✅ Completed
 
-### ⚠️ Performance Issues Identified (June 2025)
-**CRITICAL:** Comprehensive GPU performance analysis revealed major bottlenecks:
+**Core & I/O**
+- Core data structures: Atom, Element, Bond, Molecule, Trajectory, FrameData, TimelineState
+- All primary and secondary parsers: XYZ, PDB, GRO, DCD, mmCIF (with unit + integration tests)
+- File format detection and loadable-format gating
+- DCD streaming via `FrameProvider` + LRU frame cache with prefetch
 
-- **No Instanced Rendering**: Each atom = separate draw call (10,000 atoms = 10,000 draw calls)
-- **GPU Utilization**: <10% (should be >80%)
-- **CPU Position Updates**: Timeline interpolation done on CPU, transferred to GPU every frame
-- **Synchronous File Loading**: Blocks UI thread (100K atom PDB = 5-10 second freeze)
-- **O(N²) Bond Detection**: Checks every atom against every other atom
-- **No Spatial Acceleration**: No octree/BVH for queries
-- **No Frustum Culling**: All atoms rendered regardless of camera view
-- **High-Poly Meshes Everywhere**: No level-of-detail system
+**Loading & Rendering**
+- Event-driven file loading (CLI, drag-drop, file picker, async background thread)
+- Instanced atom rendering pipeline (one draw call per element present)
+- Material pool (CPK color per element), mesh pool, LOD, frustum culling
+- Bond detection (distance-based + PDB CONECT, spatial index for large systems)
+- Wireframe, Points, Cartoon/Tube/Trace ribbon modes for proteins
+- GPU compute frame interpolation (WGSL shader + CPU fallback)
 
-**Impact:**
-- 10K atoms: 10-30 FPS (unusable for smooth interaction)
-- 100K atoms: <1 FPS (completely unusable)
-- Load times: 500ms - 5s with UI freeze
+**Interaction & UI**
+- Atom selection (click, Shift-toggle, Escape clear, highlighting)
+- Distance, angle, dihedral measurements
+- Inspector panel, timeline controls, visualization/bond settings, help overlay
+- Pan-orbit camera + F / Shift+F focus shortcuts
 
-**Solution Path:** See `docs/GPU_PERFORMANCE_ANALYSIS.md` and `docs/QUICK_START_OPTIMIZATION.md`
+**Export**
+- PNG/JPEG screenshots, OBJ export, glTF export
 
-**Expected Improvements:**
-- Instanced rendering: 100-1000x performance gain
-- GPU compute updates: 10-50x faster animation
-- Async loading: Eliminates UI freezes
-- 10K atoms: 10 FPS → 200+ FPS
-- 100K atoms: <1 FPS → 60+ FPS
+**Testing & Tooling**
+- 80+ unit tests, format-specific integration tests, benchmark suite with baseline regression script
+- CI: fmt, clippy, tests, release build, benchmark smoke on main
 
-### 🔨 In Progress / Stubs
-- **Camera Controls**: Using bevy_panorbit_camera, custom controls stubbed
-- **Atom Selection**: Module exists but raycasting selection not implemented
-- **Bond Rendering**: Bond detection system not yet implemented
-- **Visualization Modes**: Only basic CPK rendering implemented
-- **Measurement Tools**: Distance/angle/dihedral measurement not implemented
-- **Export Systems**: Screenshot/video export not implemented
+### ⚠️ Partially Implemented
+
+| Feature | Status |
+|---------|--------|
+| **Surface mode** | Enum + UI placeholder; rendering not built |
+| **Color schemes** | `ColorScheme` enum defined; only CPK applied at runtime |
+| **B-factor coloring** | Palette helper exists; no UI toggle or live material update |
+| **Bond order visuals** | Order detected; no separate double/triple bond meshes |
+| **Secondary structure** | Heuristic assignment; DSSP not integrated |
+| **100K @ 60 FPS** | Architecture supports it; formal validation not complete |
+| **Memory-mapped XYZ/PDB** | `memmap2` dependency present; not used in `src/` |
+| **Video export** | `video` Cargo feature declared; no implementation |
+| **POV-Ray export** | Documented; not implemented |
 
 ### ❌ Not Implemented
-- Bond detection and rendering
-- Atom interaction (raycasting, selection highlighting)
-- Multiple visualization modes (ball-and-stick, licorice)
-- Measurement tools (distance, angle, dihedral)
-- Export functionality (screenshots, videos)
-- Secondary file formats (GRO, DCD, mmCIF)
-- Surface generation
-- Cartoon representation
+
+- Box / drag selection
+- Atom / residue text labels
+- Fly-through camera mode
+- Selection manipulation (rotate/translate)
+- Octree for picking at very large scale
+- XYZ streaming parser
+- Parallel trajectory parsing with rayon
+- Volume / isosurface rendering
+- Trajectory editing, RMSD/RMSF analysis
+- Plugin system, Python bindings, VR
+
+## Performance Status
+
+The instanced rendering pipeline addresses the bottlenecks identified in the June 2025 analysis:
+
+| Technique | Status |
+|-----------|--------|
+| Instanced rendering | ✅ Implemented |
+| Material pooling | ✅ Implemented |
+| GPU compute interpolation | ✅ Implemented (needs validation) |
+| Async file loading | ✅ Implemented |
+| Spatial bond detection | ✅ Implemented |
+| Frustum culling | ✅ Implemented |
+| Level-of-detail | ✅ Implemented |
+| DCD streaming + frame cache | ✅ Implemented |
+| Parallel parsing (rayon) | ❌ Not wired |
+| Memory-mapped XYZ/PDB | ❌ Not implemented |
+
+See `docs/GPU_PERFORMANCE_ANALYSIS.md`, `docs/PROFILING.md`, and `benches/baseline.json` for profiling workflow.
+
+**Known issues:**
+- `test_plugin_registration` fails in headless tests (GPU interpolation requires `RenderDevice`)
+- Minor clippy/dead-code warnings in `gpu_interpolation.rs`
 
 ## Getting Started
 
 ### Prerequisites
 - Rust 1.75 or higher
 - Cargo (comes with Rust)
-- For video export: FFmpeg (optional)
+- FFmpeg (optional — video export not yet implemented)
 
 ### Installation
 ```bash
@@ -116,135 +138,89 @@ cargo build --release
 
 ### Running the Project
 ```bash
-# Run the main demo (water molecule)
+# Run with demo water molecule (no file arg)
 cargo run --release
 
-# Run examples (need to be implemented)
+# Load a file via CLI
+cargo run --release -- examples/1CRN.pdb
+cargo run --release -- trajectory.xyz
+
+# Run examples
 cargo run --example basic_load
-cargo run --example xyz_viewer
-cargo run --example pdb_viewer
+cargo run --example xyz_viewer -- input.xyz
+cargo run --example pdb_viewer -- input.pdb
 ```
 
-### Current Demo
-The main application currently shows:
-- A 3D scene with a water molecule (H2O)
-- Orbit camera controls (mouse drag to rotate, scroll to zoom)
-- Red oxygen atom with two white hydrogen atoms
-- Cylindrical bonds connecting atoms
-- Point and directional lighting
-- F11 toggles fullscreen
+### Controls (main app)
+- Mouse drag — rotate camera; scroll — zoom
+- Drag file onto window — load molecular file
+- Click atom — select; Shift+click — toggle; Escape — clear
+- Space — play/pause timeline; ←/→ — prev/next frame
+- F — focus on molecule; Shift+F — focus on selection
+- F11 — fullscreen
 
 ## Development Status
 
-### Current Phase: Atom Selection Complete
-- ✅ Project structure established
-- ✅ Dependencies configured in Cargo.toml
-- ✅ Core data structures implemented
-- ✅ Primary file parsers (XYZ, PDB) working
-- ✅ Basic mesh generation functional
-- ✅ Bevy app and demo scene working
-- ✅ File loading system (CLI, drag-drop, file picker)
-- ✅ Atom spawning system with position updates and picking
-- ✅ Timeline & Animation system with interpolation
-- ✅ UI system with file loading, timeline, and selection controls
-- ✅ Atom selection system with raycasting and highlighting
+### Current Phase: Polish & Advanced Features
+Foundation, rendering pipeline, formats, interaction, and basic export are complete. Active work targets surface rendering, color schemes, export gaps, performance validation, and documentation sync.
 
-### Next Priority Phase: Secondary File Formats (Phase 1 - Week 1-2)
-According to `tasks/todo.md`, the next priorities are:
-1. **GRO Parser** - GROMACS coordinate format parser
-2. **DCD Parser** - CHARMM trajectory format parser
-3. **mmCIF Parser** - macromolecular Crystallographic Information File parser
-4. **Testing** - Unit tests and integration tests for all formats
+### Next Priorities (see `tasks/todo.md`)
+1. Fix plugin registration test + clippy warnings
+2. Surface mode and runtime color scheme switching
+3. Video and POV-Ray export
+4. Missing examples (`timeline_demo`, `interactive_selection`)
+5. 100K-atom performance validation
+6. Documentation sync across README, BUILD_OUT_ROADMAP, OPTIMIZATION_PROGRESS
 
 ### Task Tracking
-- See `tasks/todo.md` for detailed task breakdown and progress
-- Tasks organized by priority (HIGH/MEDIUM/LOW)
-- 7 major phases identified
-
-### Activity History
-- See `docs/activity.md` for detailed development timeline
+- `tasks/todo.md` — living task list with completed/remaining sections
+- `docs/activity.md` — development timeline
 
 ## Key Context for AI Agents
 
 ### Development Workflow
-- This project follows the Vybrid development methodology
-- Three mandatory files maintained: `tasks/todo.md`, `docs/activity.md`, `docs/PROJECT_README.md`
-- All development activities tracked and documented systematically
-- Tasks executed immediately - no approval waiting required
+- Three tracked files: `tasks/todo.md`, `docs/activity.md`, `docs/PROJECT_README.md`
+- Tasks executed immediately — no approval waiting required
 
 ### Code Style & Standards
-- Use `cargo fmt` for formatting
-- Pass `cargo clippy -- -D warnings`
-- Comprehensive unit tests for new functionality
-- Add documentation to public APIs
-- Follow Rust idioms and Bevy best practices
+- `cargo fmt` for formatting
+- `cargo clippy -- -D warnings` (CI enforced)
+- Unit tests for new functionality
+- Documentation on public APIs
+- Follow Rust idioms and Bevy 0.14 patterns
 
 ### Bevy-Specific Guidelines
-- Use ECS pattern: Entities with Components processed by Systems
-- Resources for global state (TimelineState, SelectionState, SimulationData)
-- Plugin architecture for modular organization
-- Component derive macros (Component, Reflect, Default)
-- System ordering using `.chain()` for dependencies
+- ECS: Entities + Components processed by Systems
+- Resources for global state (`TimelineState`, `SelectionState`, `SimulationData`)
+- Plugin architecture via `GumolVizPlugin` and per-module `register()`
+- Production atom rendering uses `rendering::instanced` (not legacy `spawning.rs` entities)
+- System ordering in `systems/mod.rs` uses explicit `.chain()` groups
 
 ### Performance Targets
-- 100,000+ atoms at 60 FPS
-- Handle trajectories with 10,000+ frames
-- Support multi-gigabyte files via streaming
-- GPU-accelerated rendering with instancing
+- 100,000+ atoms at 60 FPS (architecture in place; validation pending)
+- Trajectories with 10,000+ frames via DCD streaming
+- Multi-gigabyte DCD files via on-demand frame loading + LRU cache
 
-### File Format Priority
-1. **Primary** (Complete): XYZ, PDB
-2. **Secondary** (Not started): GRO, DCD, mmCIF
-
-## Project Evolution
-- **Initial Setup**: 2026-02-23 12:54 (project structure files)
-- **Codebase Review**: 2026-02-23 13:00 (comprehensive analysis)
-- **Context Update**: 2026-02-23 13:05 (this update)
-- **Major Changes**: Foundation complete, transitioning to system implementation
+### File Format Support
+| Format | Parser | App Loading | Streaming |
+|--------|--------|-------------|-----------|
+| XYZ | ✅ | ✅ | ❌ (full load) |
+| PDB | ✅ | ✅ | ❌ (full load) |
+| GRO | ✅ | ✅ | ❌ |
+| DCD | ✅ | ✅ | ✅ (with topology) |
+| mmCIF | ✅ | ✅ | ❌ |
 
 ## Documentation Links
-- [Task List](../tasks/todo.md) - Current development tasks with priorities
-- [Activity Log](activity.md) - Detailed timeline of all development activities
-- [Development Plan](DEVELOPMENT_PLAN.md) - Full 10-week development roadmap
-- [Architecture Guide](ARCHITECTURE.md) - System architecture diagrams
-- [Setup Guide](SETUP.md) - Environment setup instructions
-- [README](../README.md) - Project overview and quick start
-
-## Important Notes
-- Project compiles successfully with only minor warnings
-- Parsers are well-tested and functional
-- The main gap is between data loading and visualization (the "glue" systems)
-- Focus on connecting existing data structures to Bevy rendering pipeline
-- Test with real molecular files as features are implemented
+- [Task List](../tasks/todo.md) — current tasks and priorities
+- [Activity Log](activity.md) — development timeline
+- [Development Plan](DEVELOPMENT_PLAN.md) — full roadmap spec
+- [Architecture Guide](ARCHITECTURE.md) — system layout and data flow
+- [Secondary Formats](SECONDARY_FORMATS.md) — GRO, DCD, mmCIF details
+- [Profiling Guide](PROFILING.md) — benchmarks and hotspot analysis
+- [Setup Guide](SETUP.md) — environment setup
+- [README](../README.md) — project overview and quick start
 
 ---
-*Last Updated: 2026-02-23 13:05*
-*Context Version: 2.0*
-*Development Phase: System Implementation*
-
-
----
-
-## Session Update - 2026-02-23 13:57
-- **Session Started**: 2026-02-23 13:57
-- **Context Status**: Verified and up-to-date
-
-*Context automatically updated for new development session*
-
-
----
-
-## Session Update - 2026-02-25 14:51
-- **Session Started**: 2026-02-25 14:51
-- **Context Status**: Verified and up-to-date
-
-*Context automatically updated for new development session*
-
-
----
-
-## Session Update - 2026-02-28 09:21
-- **Session Started**: 2026-02-28 09:21
-- **Context Status**: Verified and up-to-date
-
-*Context automatically updated for new development session*
+*Last Updated: 2026-07-06*
+*Context Version: 3.0*
+*Development Phase: Polish & Advanced Features*

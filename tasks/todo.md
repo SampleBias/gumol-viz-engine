@@ -1,164 +1,192 @@
 # Gumol Viz Engine Todo List
 
-## Project Review & Assessment
-- [x] Analyze existing codebase structure
-- [x] Review implemented features (parsers, core data structures)
-- [x] Identify missing functionality
-- [x] Create detailed next steps plan
+**Last updated:** 2026-07-06
 
-## Phase 1: File Loading & Scene Management (Priority: HIGH)
-- [x] Implement `systems/loading.rs` - File loading system for XYZ/PDB files
-- [x] Implement `systems/spawning.rs` - Atom entity spawning from trajectory data
-- [x] Add `SimulationData` resource to store loaded trajectory
-- [x] Create `FileHandle` resource to track currently loaded file
-- [x] Add system to parse file and spawn atom entities on startup
-- [ ] Test loading actual XYZ and PDB files
+## Current Status
 
-## Phase 2: Timeline & Animation (Priority: HIGH)
-- [x] Implement `systems/timeline.rs` - Timeline playback system
-- [x] Add `update_timeline` system to advance frames during playback
-- [x] Implement `update_atom_positions` system to update atom transforms
-- [x] Add frame interpolation for smooth animation
-- [x] Create timeline UI panel with play/pause/scrub controls
-- [ ] Test timeline with multi-frame XYZ files
-
-## Phase 3: Atom Selection & Interaction (Priority: MEDIUM)
-- [x] Implement `interaction/selection.rs` - Atom selection via raycasting
-- [x] Add `SelectionState` resource to track selected atoms
-- [x] Implement selection highlighting (change material/color)
-- [x] Add selection box UI in EGUI
-- [ ] Test single and multi-atom selection
-
-## Phase 4: Bond Detection & Rendering (Priority: MEDIUM)
-- [x] Implement `systems/bonds.rs` - Distance-based bond detection
-- [x] Create bond entity spawning system
-- [x] Generate bond mesh cylinders between atoms
-- [x] Add bond rendering with proper materials
-- [x] Implement bond order detection (single/double/triple)
-- [ ] Test bond detection on protein structures
-
-## Phase 5: Visualization Modes (Priority: MEDIUM)
-- [x] Add `VisualizationConfig` resource with render mode settings
-- [x] Implement CPK mode (space-filling atoms)
-- [x] Implement Ball-and-Stick mode
-- [x] Implement Licorice mode
-- [x] Create UI selector for visualization modes
-- [x] Add atom size scaling controls
-
-## Phase 6: Measurement Tools (Priority: LOW)
-- [x] Implement `interaction/measurement.rs` - Distance calculator
-- [x] Add angle measurement tool
-- [x] Add dihedral angle measurement
-- [x] Create measurement UI display
-- [ ] Test measurements on selected atoms
-
-## Phase 7: Export Functionality (Priority: LOW)
-- [x] Implement `export/screenshot.rs` - PNG/JPEG screenshot capture
-- [x] Add export UI panel
-- [ ] Test screenshot functionality
-
-## Documentation & Examples (Priority: MEDIUM)
-- [x] Create example XYZ file for testing (demo_trajectory.xyz, examples/water.gro, water.cif)
-- [x] Create example PDB file for testing (examples/1CRN.pdb — crambin from RCSB)
-- [ ] Update examples/basic_load.rs to use actual file loading
-- [x] Update examples/xyz_viewer.rs to implement XYZ viewer
-- [x] Update examples/pdb_viewer.rs to implement PDB viewer
-- [ ] Add inline documentation to all systems
-- [ ] Update README with current feature status
-
-## Testing & Quality
-- [x] Add unit tests for loading system
-- [x] Add unit tests for timeline system
-- [ ] Add integration tests for full workflow
-- [ ] Performance test with 10,000 atoms
-- [ ] Performance test with 100,000 atoms
-- [ ] Fix any clippy warnings
-
-## Review Section
-*This section will be updated upon completion with a summary of all changes made during the session.*
-
----
-*Created: 2026-02-23 12:54*
-*Last Updated: 2026-02-27*
-*Review Date: 2026-02-27*
+The engine has a working instanced-rendering pipeline, full primary/secondary file format support, timeline playback with interpolation, bond detection, multiple visualization modes, selection/measurements, and PNG/OBJ/glTF export. Remaining work is concentrated in surface rendering, alternate color schemes, video/POV-Ray export, interaction polish, large-scale performance validation, and documentation/examples sync.
 
 ---
 
-## New Session - 2026-02-23 13:57
-- [x] Review existing todo items
-- [x] Identify new requirements
-- [x] Update task priorities
-- [x] Add session-specific tasks
+## Completed
 
-*Session started: 2026-02-23 13:57*
+### Core & I/O
+- [x] Core data structures (`Atom`, `Bond`, `Molecule`, `Trajectory`, `TimelineState`)
+- [x] XYZ parser with tests
+- [x] PDB parser with tests (ATOM, HETATM, CONECT, CRYST1)
+- [x] GRO parser with tests and loading integration
+- [x] DCD parser with tests, streaming provider, and topology pairing
+- [x] mmCIF parser with tests and `create_atom_data_from_mmcif()`
+- [x] `FileFormat` detection and `is_loadable()` for all supported formats
+- [x] `docs/SECONDARY_FORMATS.md`
 
-## New Session - 2026-02-23 15:00
-- [x] Fix critical compilation errors (load_cli_file, FilePickerState Send issue)
-- [x] Test compilation after fixes
-- [x] Implement Timeline & Animation system (Phase 2)
-- [x] Test timeline with demo_trajectory.xyz
-- [x] Update activity log and PROJECT_README
+### Loading & Scene Management
+- [x] `systems/loading.rs` — `LoadFileEvent` pipeline, CLI arg, `SimulationData`, `FileHandle`
+- [x] Async background file loading (`poll_async_load`)
+- [x] DCD on-demand frame loading via `FrameProvider`
+- [x] LRU frame cache + prefetch (`systems/frame_cache.rs`)
+- [x] Topology loading for DCD trajectories
+- [x] Instanced atom spawning (`rendering/instanced.rs`) — production render path
+- [x] Legacy `systems/spawning.rs` kept for `AtomEntities` compatibility
+- [x] Reload clears instanced atoms, bonds, wireframe, ribbon, frame cache
 
-*Session started: 2026-02-23 15:00*
+### Timeline & Animation
+- [x] `systems/timeline.rs` — playback, speed, loop, keyboard controls
+- [x] Frame interpolation (CPU + GPU compute path)
+- [x] Timeline UI panel (play/pause, scrub, speed presets, interpolation toggle)
+- [x] GPU interpolation shader (`assets/shaders/atom_interpolate.wgsl`, `rendering/gpu_interpolation.rs`)
 
-## Critical Bug Fixes (Priority: CRITICAL)
-- [ ] Fix panic runtime conflict with Bevy dynamic_linking feature
-- [ ] Update Cargo.toml profile configurations
-- [ ] Test compilation after fix
-- [ ] Verify dynamic linking works correctly
+### Bonds & Visualization
+- [x] Distance-based bond detection with spatial index (`rstar`)
+- [x] PDB CONECT record support
+- [x] Bond order detection (single/double/triple)
+- [x] Bond cylinder rendering with visibility/scale controls
+- [x] CPK, Ball-and-Stick, Licorice modes
+- [x] Wireframe mode (`rendering/wireframe.rs`)
+- [x] Points mode
+- [x] Protein ribbon modes: Cartoon, Tube, Trace (`rendering/ribbon.rs`)
+- [x] Heuristic secondary-structure assignment for backbone
+- [x] `VisualizationConfig` + UI mode selector and atom/bond scale controls
+
+### Interaction & Camera
+- [x] Atom selection via instanced pick proxies + `bevy_mod_picking`
+- [x] Shift-toggle multi-select, Escape to clear
+- [x] Selection highlighting on instanced batches
+- [x] Distance, angle, and dihedral measurements (`interaction/measurement.rs`)
+- [x] Inspector panel (`ui/inspector.rs`)
+- [x] Pan-orbit camera (`bevy_panorbit_camera`)
+- [x] F — focus on molecule; Shift+F — focus on selection
+
+### Export
+- [x] PNG/JPEG screenshot capture (`export/screenshot.rs`)
+- [x] OBJ export (`export/obj.rs`)
+- [x] glTF export (`export/gltf_export.rs`)
+- [x] Export UI buttons (screenshot, OBJ, glTF)
+
+### Performance (implemented — needs validation)
+- [x] Instanced rendering (one draw call per element present)
+- [x] Material pool — one CPK material per element (`rendering/material_pool.rs`)
+- [x] Mesh pool + LOD system (`rendering/mesh_pool.rs`, `rendering/lod_system.rs`)
+- [x] CPU frustum culling (`rendering/culling.rs`)
+- [x] Spatial bond detection above threshold
+- [x] `PerformanceSettings` + `PerformanceDiagnostics` resources
+- [x] Benchmark suite (`benches/parsing.rs`, `rendering.rs`, `bonds.rs`, `loading.rs`)
+- [x] Baseline JSON + regression script (`benches/baseline.json`, `scripts/check_bench_regression.py`)
+- [x] Profiling guide (`docs/PROFILING.md`)
+
+### UI
+- [x] File open dialog, drag-and-drop, CLI load
+- [x] Status panel (atoms, frames, memory, draw calls)
+- [x] Timeline, visualization, bond settings panels
+- [x] Help overlay (`ui/help.rs`)
+- [x] Toast notifications (`ui/notifications.rs`)
+
+### Testing
+- [x] 80+ library unit tests passing
+- [x] Integration tests: format detection, XYZ/PDB/GRO/DCD/mmCIF load, load pipeline
+- [x] Example fixtures (`tests/fixtures/`, `examples/water.gro`, `water.cif`, `1CRN.pdb`)
 
 ---
 
-## New Session - 2026-02-25 14:51
-- [x] Review existing todo items
-- [x] Identify new requirements
-- [x] Update task priorities
-- [x] Add session-specific tasks
+## Remaining Work
 
-*Session started: 2026-02-25 14:51*
+### Priority: CRITICAL
 
-## Phase 1: Secondary File Formats (Priority: HIGH)
-- [x] Implement GRO format parser (`src/io/gro.rs`) - 434 lines
-- [x] Implement DCD format parser (`src/io/dcd.rs`) - 280 lines
-- [x] Implement mmCIF format parser (`src/io/mmcif.rs`) - 350+ lines
-- [x] Update `src/io/mod.rs` to register new parsers
-- [x] Update `FileFormat::is_loadable()` to include secondary formats
-- [x] Add GRO format tests
-- [x] Add DCD format tests
-- [x] Add mmCIF format tests
-- [x] Create example GRO file for testing
-- [x] Create example mmCIF file for testing
-- [x] Load .gro files - Full integration with file loading system
-- [x] Document GroParser API in `docs/gro_parser_reference.md` (already exists)
-- [ ] Fix pre-existing glTF export compilation errors (blocking testing)
-- [ ] Run unit tests for all new parsers
-- [ ] Test loading actual mmCIF files
-- [x] Complete `create_atom_data_from_mmcif()` implementation
-- [x] Update documentation for secondary formats (`docs/SECONDARY_FORMATS.md`)
+- [ ] Fix `test_gumol_viz_plugin_registers` — GPU interpolation plugin requires `RenderDevice` in headless test world
+- [ ] Fix clippy warnings (`gpu_interpolation.rs` dead code; CI runs `clippy -D warnings`)
+- [ ] Verify `dev_dynamic` profile works end-to-end (panic = unwind profile exists; manual test still open)
+
+### Priority: HIGH — Visualization
+
+- [ ] **Surface mode** — `RenderMode::Surface` defined but not implemented; UI shows "coming soon"
+- [ ] **Color schemes** — `ColorScheme` enum exists (Residue, Chain, BFactor, SecondaryStructure, etc.) but only CPK is applied at runtime
+- [ ] **B-factor coloring** — palette helper exists; no UI toggle or material update path
+- [ ] **Double/triple bond meshes** — order detected; no separate visual geometry
+
+### Priority: HIGH — Export
+
+- [ ] **Video export** — `video` Cargo feature declared; no `export/video.rs` or FFmpeg integration
+- [ ] **POV-Ray export** — mentioned in README/lib docs; not implemented
+
+### Priority: HIGH — Performance Validation
+
+- [ ] Prove 10K-atom load + playback targets (benchmarks exist; formal pass criteria not recorded)
+- [ ] Prove 100K-atom @ 60 FPS target
+- [ ] Validate GPU interpolation accuracy and perf vs CPU fallback
+- [ ] Enforce benchmark regression gate in CI (script exists; smoke job on main only)
+- [ ] Parallel trajectory parsing with `rayon` (dependency present; not wired)
+
+### Priority: MEDIUM — Interaction & Camera
+
+- [ ] Box / drag selection (`selection.rs` notes "not yet implemented")
+- [ ] Atom / residue text labels (3D or egui overlay)
+- [ ] Fly-through camera mode (only orbit implemented)
+- [ ] Selection manipulation (rotate/translate groups)
+- [ ] Octree or spatial index for picking at very large scale
+
+### Priority: MEDIUM — File I/O
+
+- [ ] Memory-mapped XYZ/PDB loading (`memmap2` dependency unused in `src/`)
+- [ ] XYZ streaming parser (`XYZStreamer` from dev plan — not built)
+- [ ] Manual end-to-end UI testing for GRO, DCD, mmCIF loads
+
+### Priority: MEDIUM — Examples & Documentation
+
+- [ ] Update `examples/basic_load.rs` to load a real file (still hardcoded benzene ring)
+- [ ] Add `timeline_demo` example (referenced in README; missing from `Cargo.toml`)
+- [ ] Add `interactive_selection` example (referenced in README; missing)
+- [ ] Update README roadmap to match implemented features
+- [ ] Sync stale docs: `BUILD_OUT_ROADMAP.md`, `OPTIMIZATION_PROGRESS.md`, `PROJECT_README.md`
+- [ ] Add inline documentation to all public systems/APIs
+- [ ] Write user guide (listed in dev plan)
+
+### Priority: LOW — Advanced / v1.0+
+
+- [ ] DSSP-based secondary structure (replace distance heuristic)
+- [ ] Volume / isosurface rendering
+- [ ] Dedicated settings panel (lighting, background, global render options)
+- [ ] Trajectory editing (cut, splice, merge)
+- [ ] Real-time analysis (RMSD, RMSF)
+- [ ] Plugin / extension system
+- [ ] Python bindings
+- [ ] VR support (OpenXR)
+
+### Priority: LOW — Manual QA (unchecked from earlier phases)
+
+- [ ] Manual test: single and multi-atom selection in running app
+- [ ] Manual test: measurements on selected atoms in running app
+- [ ] Manual test: bond detection on protein structures (e.g. 1CRN)
+- [ ] Manual test: screenshot save flow in running app
+- [ ] Manual test: timeline scrub/playback on multi-frame XYZ
 
 ---
 
-## New Session - 2026-02-27
-- [x] Complete `create_atom_data_from_mmcif()` — added `MmcifParser::parse_atom_data_from_file()`, `parse_mmcif_data()`, improved `parse_atom_data()` with alternative column names
-- [x] Create `docs/SECONDARY_FORMATS.md` — comprehensive docs for GRO, DCD, mmCIF
+## Session History
+
+### 2026-02-23 — Foundation
+- [x] Project structure review and initial implementation plan
+- [x] File loading, spawning, timeline, selection, bonds, viz modes, measurements, screenshot export
+
+### 2026-02-25 / 2026-02-27 — Secondary Formats
+- [x] GRO, DCD, mmCIF parsers + tests + loading integration
+- [x] `docs/SECONDARY_FORMATS.md`
+
+### 2025-06-17 — GPU Performance (analysis + implementation)
+- [x] `docs/GPU_PERFORMANCE_ANALYSIS.md`, `docs/QUICK_START_OPTIMIZATION.md`
+- [x] Instanced rendering pipeline
+- [x] Material pool, mesh pool, LOD, frustum culling
+- [x] Spatial bond detection
+- [x] Async file loading, DCD streaming, frame cache
+- [x] GPU compute interpolation (WGSL shader + render graph node)
+- [x] Benchmark suite and baseline
+- [ ] Puffin/Tracy profiling integration (Bevy `trace` feature available; puffin not added)
+- [ ] Parallel file parsing with rayon
+
+### 2026-07-06 — Status sync
+- [x] Codebase review against todo list
+- [x] Updated this file to reflect actual implementation state
 
 ---
 
-## New Session - 2025-06-17 09:30 - GPU Performance Optimization
-- [x] Comprehensive GPU performance analysis completed
-- [x] Identified 6 critical performance bottlenecks
-- [x] Created detailed performance analysis document (`docs/GPU_PERFORMANCE_ANALYSIS.md`)
-- [x] Created quick start optimization guide (`docs/QUICK_START_OPTIMIZATION.md`)
-- [ ] Implement instanced rendering (CRITICAL - Week 1-2)
-- [ ] Implement GPU compute for position updates (CRITICAL - Week 3-4)
-- [ ] Implement async file loading (CRITICAL - Week 3-4)
-- [ ] Implement material pooling (CRITICAL - Week 1-2)
-- [ ] Implement spatial partitioning for bond detection (HIGH - Week 7-8)
-- [ ] Implement frustum culling (HIGH - Week 7-8)
-- [ ] Implement level-of-detail (LOD) system (HIGH - Week 9-10)
-- [ ] Implement parallel file parsing with rayon (HIGH - Week 9-10)
-- [ ] Add performance profiling with puffin (CRITICAL - Week 1)
-- [ ] Create benchmark suite for performance testing (CRITICAL - Week 1)
-- [ ] Document baseline performance metrics (CRITICAL - Week 1)
-
-*Session started: 2025-06-17 09:30*
+*Created: 2026-02-23*
+*Last reviewed: 2026-07-06*
