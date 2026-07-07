@@ -10,6 +10,7 @@ use crate::core::trajectory::TimelineState;
 use crate::core::visualization::{ColorScheme, RenderMode, VisualizationConfig};
 use crate::export::gltf_export::RequestExportGltfEvent;
 use crate::export::obj::RequestExportObjEvent;
+use crate::export::povray::RequestExportPovRayEvent;
 use crate::export::screenshot::RequestScreenshotEvent;
 use crate::export::video::{RequestVideoExportEvent, VideoExportSettings, VideoExportState};
 use crate::interaction::measurement::MeasurementState;
@@ -71,12 +72,19 @@ pub struct VideoSaveState {
     receiver: Option<crossbeam_channel::Receiver<Option<std::path::PathBuf>>>,
 }
 
+/// Resource holding receiver for async POV-Ray export save path
+#[derive(Resource, Default)]
+pub struct PovRaySaveState {
+    receiver: Option<crossbeam_channel::Receiver<Option<std::path::PathBuf>>>,
+}
+
 #[derive(SystemParam)]
 pub struct ExportSaveStates<'w> {
     pub screenshot: ResMut<'w, ScreenshotSaveState>,
     pub obj: ResMut<'w, ObjSaveState>,
     pub gltf: ResMut<'w, GltfSaveState>,
     pub video: ResMut<'w, VideoSaveState>,
+    pub povray: ResMut<'w, PovRaySaveState>,
 }
 
 #[derive(SystemParam)]
@@ -257,6 +265,25 @@ pub fn video_save_poll(
                         end_frame: total.saturating_sub(1),
                     },
                 });
+            }
+            Ok(None) => {}
+            Err(crossbeam_channel::TryRecvError::Empty) => {
+                save_state.receiver = Some(receiver);
+            }
+            Err(crossbeam_channel::TryRecvError::Disconnected) => {}
+        }
+    }
+}
+
+/// Poll for POV-Ray export save path and send RequestExportPovRayEvent
+pub fn povray_save_poll(
+    mut save_state: ResMut<PovRaySaveState>,
+    mut export_events: EventWriter<RequestExportPovRayEvent>,
+) {
+    if let Some(receiver) = save_state.receiver.take() {
+        match receiver.try_recv() {
+            Ok(Some(path)) => {
+                export_events.send(RequestExportPovRayEvent { path });
             }
             Ok(None) => {}
             Err(crossbeam_channel::TryRecvError::Empty) => {
@@ -817,12 +844,14 @@ pub fn main_ui_panel(
             let screenshot_pending = export_panel.saves.screenshot.receiver.is_some();
             let obj_pending = export_panel.saves.obj.receiver.is_some();
             let gltf_pending = export_panel.saves.gltf.receiver.is_some();
+            let povray_pending = export_panel.saves.povray.receiver.is_some();
             let video_dialog_pending = export_panel.saves.video.receiver.is_some();
             let video_recording = export_panel.video.status
                 != crate::export::video::VideoExportStatus::Idle;
             let any_export_pending = screenshot_pending
                 || obj_pending
                 || gltf_pending
+                || povray_pending
                 || video_dialog_pending;
 
             if ui
@@ -878,6 +907,25 @@ pub fn main_ui_panel(
                     let result = rfd::FileDialog::new()
                         .add_filter("glTF 2.0 (JSON + embedded buffer)", &["gltf"])
                         .set_file_name("molecule.gltf")
+                        .save_file();
+                    let _ = tx.send(result);
+                });
+            }
+
+            if ui
+                .add_enabled(
+                    sim_data.loaded && !povray_pending,
+                    bevy_egui::egui::Button::new("🎨 Export POV-Ray..."),
+                )
+                .clicked()
+            {
+                let (tx, rx) = crossbeam_channel::unbounded();
+                export_panel.saves.povray.receiver = Some(rx);
+
+                std::thread::spawn(move || {
+                    let result = rfd::FileDialog::new()
+                        .add_filter("POV-Ray scene", &["pov"])
+                        .set_file_name("molecule.pov")
                         .save_file();
                     let _ = tx.send(result);
                 });
@@ -982,6 +1030,7 @@ pub fn register(app: &mut App) {
         .init_resource::<ObjSaveState>()
         .init_resource::<GltfSaveState>()
         .init_resource::<VideoSaveState>()
+        .init_resource::<PovRaySaveState>()
         .add_systems(
             Update,
             (
@@ -992,6 +1041,7 @@ pub fn register(app: &mut App) {
                 export_obj_save_poll,
                 export_gltf_save_poll,
                 video_save_poll,
+                povray_save_poll,
                 render_mode_shortcuts,
             ),
         )

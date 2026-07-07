@@ -61,7 +61,9 @@ The engine has a working instanced-rendering pipeline, full primary/secondary fi
 - [x] PNG/JPEG screenshot capture (`export/screenshot.rs`)
 - [x] OBJ export (`export/obj.rs`)
 - [x] glTF export (`export/gltf_export.rs`)
-- [x] Export UI buttons (screenshot, OBJ, glTF)
+- [x] POV-Ray export (`export/povray.rs`)
+- [x] Video export (`export/video.rs`)
+- [x] Export UI buttons (screenshot, OBJ, glTF, POV-Ray, video)
 
 ### Performance (implemented — needs validation)
 - [x] Instanced rendering (one draw call per element present)
@@ -105,7 +107,7 @@ The engine has a working instanced-rendering pipeline, full primary/secondary fi
 ### Priority: HIGH — Export
 
 - [x] **Video export** — `export/video.rs`; FFmpeg subprocess; `video` Cargo feature; UI record button
-- [ ] **POV-Ray export** — mentioned in README/lib docs; not implemented
+- [x] **POV-Ray export** — `export/povray.rs`; `.pov` spheres/cylinders + camera; UI button
 
 ### Priority: HIGH — Performance Validation
 
@@ -132,9 +134,9 @@ The engine has a working instanced-rendering pipeline, full primary/secondary fi
 
 ### Priority: MEDIUM — Examples & Documentation
 
-- [ ] Update `examples/basic_load.rs` to load a real file (still hardcoded benzene ring)
-- [ ] Add `timeline_demo` example (referenced in README; missing from `Cargo.toml`)
-- [ ] Add `interactive_selection` example (referenced in README; missing)
+- [x] Update `examples/basic_load.rs` to load a real file via instanced pipeline
+- [x] Add `timeline_demo` example (referenced in README; missing from `Cargo.toml`)
+- [x] Add `interactive_selection` example (referenced in README; missing)
 - [ ] Update README roadmap to match implemented features
 - [ ] Sync stale docs: `BUILD_OUT_ROADMAP.md`, `OPTIMIZATION_PROGRESS.md`, `PROJECT_README.md`
 - [ ] Add inline documentation to all public systems/APIs
@@ -183,6 +185,10 @@ See interactive checklist in `docs/VALIDATION.md`.
 - [x] Benchmark suite and baseline
 - [ ] Puffin/Tracy profiling integration (Bevy `trace` feature available; puffin not added)
 - [ ] Parallel file parsing with rayon
+
+### 2026-07-07 — Sprint 4 (v0.2 export + examples)
+- [x] POV-Ray export (`export/povray.rs`) + UI button
+- [x] `basic_load`, `timeline_demo`, `interactive_selection` examples
 
 ### 2026-07-07 — Sprint 1 validation
 - [x] Automated validation tests (`tests/sprint1_validation.rs`)

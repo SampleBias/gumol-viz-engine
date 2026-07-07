@@ -1,7 +1,9 @@
-//! Basic file loading example — uses the Gumol instanced pipeline.
+//! Timeline playback demo — loads a multi-frame trajectory and prints controls.
 //!
-//! Loads `demo_trajectory.xyz` (or `tests/fixtures/water.xyz`) on startup when present.
-//! Pass a file path as the first CLI argument to load a specific structure.
+//! ```bash
+//! cargo run --example timeline_demo
+//! cargo run --example timeline_demo -- path/to/trajectory.xyz
+//! ```
 
 use bevy::prelude::*;
 use gumol_viz_engine::systems::loading::{CliFileArg, LoadFileEvent};
@@ -9,10 +11,16 @@ use gumol_viz_engine::GumolVizPlugin;
 use std::path::PathBuf;
 
 fn main() {
+    println!("Gumol Viz Engine — Timeline Demo");
+    println!("================================");
+    println!("Space — play/pause   ← → — step frames");
+    println!("Home/End — first/last frame   L — loop   I — interpolation");
+    println!();
+
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "Gumol Viz Engine — Basic Load".to_string(),
+                title: "Gumol Viz Engine — Timeline Demo".to_string(),
                 resolution: (1280., 720.).into(),
                 present_mode: bevy::window::PresentMode::AutoVsync,
                 resizable: true,
@@ -24,14 +32,14 @@ fn main() {
         .add_plugins(bevy_mod_picking::DefaultPickingPlugins)
         .add_plugins(bevy_panorbit_camera::PanOrbitCameraPlugin)
         .add_plugins(GumolVizPlugin)
-        .add_systems(Startup, (setup_scene, load_demo_file))
+        .add_systems(Startup, (setup_scene, load_trajectory))
         .run();
 }
 
 fn setup_scene(mut commands: Commands) {
     commands.spawn((
         Camera3dBundle {
-            transform: Transform::from_xyz(0.0, 0.0, 15.0).looking_at(Vec3::ZERO, Vec3::Y),
+            transform: Transform::from_xyz(0.0, 0.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         },
         bevy_panorbit_camera::PanOrbitCamera::default(),
@@ -53,25 +61,24 @@ fn setup_scene(mut commands: Commands) {
     });
 }
 
-const DEMO_CANDIDATES: &[&str] = &[
+const TRAJECTORY_CANDIDATES: &[&str] = &[
     "demo_trajectory.xyz",
     "tests/fixtures/water.xyz",
-    "tests/fixtures/1CRN.pdb",
 ];
 
-fn load_demo_file(cli_arg: Res<CliFileArg>, mut load_events: EventWriter<LoadFileEvent>) {
+fn load_trajectory(cli_arg: Res<CliFileArg>, mut load_events: EventWriter<LoadFileEvent>) {
     if cli_arg.0.is_some() {
         return;
     }
 
-    for candidate in DEMO_CANDIDATES {
+    for candidate in TRAJECTORY_CANDIDATES {
         let path = PathBuf::from(candidate);
         if path.exists() {
-            info!("Loading demo file: {}", path.display());
+            info!("Loading trajectory: {}", path.display());
             load_events.send(LoadFileEvent { path });
             return;
         }
     }
 
-    info!("No demo file found — open a file from the UI or pass a path on the command line");
+    warn!("No demo trajectory found — use: cargo run --example timeline_demo -- file.xyz");
 }

@@ -156,6 +156,14 @@ path = "examples/xyz_viewer.rs"
 name = "pdb_viewer"
 path = "examples/pdb_viewer.rs"
 
+[[example]]
+name = "timeline_demo"
+path = "examples/timeline_demo.rs"
+
+[[example]]
+name = "interactive_selection"
+path = "examples/interactive_selection.rs"
+
 [[bench]]
 name = "parsing"
 harness = false
