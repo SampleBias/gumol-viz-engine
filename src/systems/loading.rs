@@ -136,6 +136,50 @@ impl SimulationData {
         self.frame_provider.is_some()
     }
 
+    /// Min/max B-factor across loaded atoms (defaults when flat or missing).
+    pub fn b_factor_range(&self) -> (f32, f32) {
+        let mut min = f32::MAX;
+        let mut max = f32::MIN;
+        for atom in &self.atom_data {
+            min = min.min(atom.b_factor);
+            max = max.max(atom.b_factor);
+        }
+        if min > max || (max - min).abs() < 1e-6 {
+            (0.0, 50.0)
+        } else {
+            (min, max)
+        }
+    }
+
+    /// Bounds and coloring context for a trajectory frame.
+    pub fn color_context(&self, frame_idx: usize) -> crate::core::visualization::ColorContext {
+        use crate::core::visualization::ColorContext;
+        let (min_b_factor, max_b_factor) = self.b_factor_range();
+        let mut bounds_min = Vec3::splat(f32::MAX);
+        let mut bounds_max = Vec3::splat(f32::MIN);
+
+        if let Some(frame) = self.get_frame(frame_idx) {
+            for atom in &self.atom_data {
+                if let Some(p) = frame.get_position(atom.id) {
+                    bounds_min = bounds_min.min(p);
+                    bounds_max = bounds_max.max(p);
+                }
+            }
+        }
+
+        if bounds_min.x > bounds_max.x {
+            bounds_min = Vec3::ZERO;
+            bounds_max = Vec3::ONE;
+        }
+
+        ColorContext {
+            min_b_factor,
+            max_b_factor,
+            bounds_min,
+            bounds_max,
+        }
+    }
+
     /// Access the streaming frame provider when present.
     pub fn frame_provider(&self) -> Option<Arc<dyn FrameProvider>> {
         self.frame_provider.clone()

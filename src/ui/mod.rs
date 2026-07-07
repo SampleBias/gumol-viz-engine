@@ -7,7 +7,7 @@ pub mod notifications;
 use crate::core::secondary_structure::ProteinBackbone;
 use crate::core::secondary_structure::MIN_CARTOON_RESIDUES;
 use crate::core::trajectory::TimelineState;
-use crate::core::visualization::{RenderMode, VisualizationConfig};
+use crate::core::visualization::{ColorScheme, RenderMode, VisualizationConfig};
 use crate::export::gltf_export::RequestExportGltfEvent;
 use crate::export::obj::RequestExportObjEvent;
 use crate::export::screenshot::RequestScreenshotEvent;
@@ -635,12 +635,11 @@ pub fn main_ui_panel(
                         RenderMode::Points,
                         RenderMode::Points.name(),
                     );
-
-                    ui.separator();
-
-                    ui.add_enabled_ui(false, |ui| {
-                        ui.label("Surface — coming soon (v1.1)");
-                    });
+                    ui.selectable_value(
+                        &mut viz_ui.viz_config.render_mode,
+                        RenderMode::Surface,
+                        RenderMode::Surface.name(),
+                    );
 
                     ui.separator();
                     ui.label("Protein backbone:");
@@ -669,9 +668,20 @@ pub fn main_ui_panel(
                     }
                 });
 
-            if viz_ui.viz_config.render_mode == RenderMode::Surface {
-                viz_ui.viz_config.render_mode = RenderMode::CPK;
-            }
+            ui.separator();
+
+            ui.label("Color scheme:");
+            bevy_egui::egui::ComboBox::from_label("")
+                .selected_text(viz_ui.viz_config.color_scheme.name())
+                .show_ui(ui, |ui| {
+                    for scheme in ColorScheme::UI_SCHEMES {
+                        ui.selectable_value(
+                            &mut viz_ui.viz_config.color_scheme,
+                            *scheme,
+                            scheme.name(),
+                        );
+                    }
+                });
 
             ui.separator();
 

@@ -135,10 +135,12 @@ fn test_multi_frame_timeline_interpolation() {
     let frame_b = sim.get_frame(1).expect("frame 1");
     let layout = DenseAtomLayout::build(&sim.atom_data);
 
-    let mut timeline = TimelineState::default();
-    timeline.interpolate = true;
-    timeline.interpolation_factor = 0.4;
-    timeline.current_frame = 0;
+    let timeline = TimelineState {
+        interpolate: true,
+        interpolation_factor: 0.4,
+        current_frame: 0,
+        ..Default::default()
+    };
 
     let pos_a: Vec<Vec3> = layout
         .dense_atom_ids

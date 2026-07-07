@@ -293,8 +293,8 @@ Read the [Development Plan](docs/DEVELOPMENT_PLAN.md) and [Architecture Guide](d
 - [x] EGUI interface
 
 ### Version 0.2.0 — Polish (in progress)
-- [ ] Surface rendering mode
-- [ ] Runtime color schemes (Residue, BFactor, Chain, etc.)
+- [x] Surface rendering mode (coarse SAS voxel shell)
+- [x] Runtime color schemes (CPK, Residue, Chain, B-factor)
 - [ ] Video export (FFmpeg, `video` feature)
 - [ ] POV-Ray export
 - [ ] Box selection and atom labels

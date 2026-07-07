@@ -9,6 +9,7 @@ pub mod lod_system;
 pub mod material_pool;
 pub mod mesh_pool;
 pub mod ribbon;
+pub mod surface;
 pub mod wireframe;
 
 use bevy::{
@@ -25,6 +26,7 @@ pub fn register(app: &mut App) {
     gpu_interpolation::register(app);
     wireframe::register(app);
     ribbon::register(app);
+    surface::register(app);
     mesh_pool::register(app);
     material_pool::register(app);
     info!("Rendering module registered");

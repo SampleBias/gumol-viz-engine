@@ -141,9 +141,9 @@ impl RenderMode {
                 uniform_bond_color: true,
             },
             RenderMode::Surface => ModeParams {
-                atom_scale: 1.0,
+                atom_scale: 0.0,
                 bond_scale: 0.0,
-                show_atoms: true,
+                show_atoms: false,
                 show_bonds: false,
                 show_ribbon: false,
                 use_wireframe_lines: false,
@@ -190,7 +190,7 @@ impl RenderMode {
 
     /// Whether this mode is available in the current release.
     pub fn is_implemented(&self) -> bool {
-        !matches!(self, RenderMode::Surface)
+        true
     }
 
     /// All render modes in cycle order
@@ -282,6 +282,88 @@ pub enum ColorScheme {
     Charge,
     /// Custom property
     Custom,
+}
+
+impl ColorScheme {
+    pub fn name(&self) -> &'static str {
+        match self {
+            ColorScheme::CPK => "CPK (element)",
+            ColorScheme::Residue => "Residue",
+            ColorScheme::Chain => "Chain",
+            ColorScheme::BFactor => "B-factor",
+            ColorScheme::SecondaryStructure => "Secondary structure",
+            ColorScheme::Molecule => "Molecule",
+            ColorScheme::Uniform => "Uniform",
+            ColorScheme::GradientX => "Gradient X",
+            ColorScheme::GradientY => "Gradient Y",
+            ColorScheme::GradientZ => "Gradient Z",
+            ColorScheme::Charge => "Charge",
+            ColorScheme::Custom => "Custom",
+        }
+    }
+
+    /// Runtime-selectable schemes in the UI (v0.2).
+    pub const UI_SCHEMES: &'static [ColorScheme] = &[
+        ColorScheme::CPK,
+        ColorScheme::Residue,
+        ColorScheme::Chain,
+        ColorScheme::BFactor,
+    ];
+}
+
+/// Context for resolving per-atom colors.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ColorContext {
+    pub min_b_factor: f32,
+    pub max_b_factor: f32,
+    pub bounds_min: Vec3,
+    pub bounds_max: Vec3,
+}
+
+impl ColorScheme {
+    /// Resolve display color for an atom under this scheme.
+    pub fn atom_color(&self, atom: &crate::core::atom::AtomData, ctx: &ColorContext) -> Color {
+        match self {
+            ColorScheme::CPK => {
+                let rgb = atom.element.cpk_color();
+                Color::srgb(rgb[0], rgb[1], rgb[2])
+            }
+            ColorScheme::Residue => ColorPalette::residue_color(&atom.residue_name),
+            ColorScheme::Chain => ColorPalette::chain_color(&atom.chain_id),
+            ColorScheme::BFactor => {
+                ColorPalette::b_factor_color(atom.b_factor, ctx.min_b_factor, ctx.max_b_factor)
+            }
+            ColorScheme::GradientX => {
+                let t = gradient_t(atom.position.x, ctx.bounds_min.x, ctx.bounds_max.x);
+                Color::hsla(0.66 * (1.0 - t), 0.8, 0.5, 1.0)
+            }
+            ColorScheme::GradientY => {
+                let t = gradient_t(atom.position.y, ctx.bounds_min.y, ctx.bounds_max.y);
+                Color::hsla(0.66 * (1.0 - t), 0.8, 0.5, 1.0)
+            }
+            ColorScheme::GradientZ => {
+                let t = gradient_t(atom.position.z, ctx.bounds_min.z, ctx.bounds_max.z);
+                Color::hsla(0.66 * (1.0 - t), 0.8, 0.5, 1.0)
+            }
+            ColorScheme::Uniform => Color::srgb(0.7, 0.7, 0.85),
+            ColorScheme::Charge => {
+                let t = (atom.charge.clamp(-1.0, 1.0) + 1.0) * 0.5;
+                Color::srgb(t, 0.2, 1.0 - t)
+            }
+            _ => {
+                let rgb = atom.element.cpk_color();
+                Color::srgb(rgb[0], rgb[1], rgb[2])
+            }
+        }
+    }
+}
+
+fn gradient_t(value: f32, min: f32, max: f32) -> f32 {
+    if (max - min).abs() < 1e-6 {
+        0.5
+    } else {
+        ((value - min) / (max - min)).clamp(0.0, 1.0)
+    }
 }
 
 /// Material properties for rendering
@@ -435,6 +517,8 @@ impl ColorPalette {
 pub struct VisualizationConfig {
     /// Current rendering mode
     pub render_mode: RenderMode,
+    /// Per-atom coloring scheme
+    pub color_scheme: ColorScheme,
     /// Atom size multiplier (0.1 to 2.0)
     pub atom_scale: f32,
     /// Bond thickness multiplier (0.1 to 3.0)
@@ -449,6 +533,7 @@ impl Default for VisualizationConfig {
     fn default() -> Self {
         Self {
             render_mode: RenderMode::default(),
+            color_scheme: ColorScheme::default(),
             atom_scale: 1.0,
             bond_scale: 1.0,
             show_bonds: true,
@@ -514,9 +599,33 @@ mod tests {
     fn test_visualization_config_default() {
         let config = VisualizationConfig::default();
         assert_eq!(config.render_mode, RenderMode::CPK);
+        assert_eq!(config.color_scheme, ColorScheme::CPK);
         assert_eq!(config.atom_scale, 1.0);
         assert_eq!(config.bond_scale, 1.0);
         assert!(config.show_bonds);
         assert!(config.show_atoms);
+    }
+
+    #[test]
+    fn test_b_factor_color_scheme() {
+        use crate::core::atom::{AtomData, Element};
+        let low = AtomData::new(0, Element::C, 0, "ALA".into(), "A".into(), "CA".into());
+        let mut high = AtomData::new(1, Element::C, 0, "ALA".into(), "A".into(), "CB".into());
+        high.b_factor = 80.0;
+        let ctx = ColorContext {
+            min_b_factor: 0.0,
+            max_b_factor: 80.0,
+            bounds_min: Vec3::ZERO,
+            bounds_max: Vec3::ONE,
+        };
+        let c_low = ColorScheme::BFactor.atom_color(&low, &ctx);
+        let c_high = ColorScheme::BFactor.atom_color(&high, &ctx);
+        assert_ne!(c_low, c_high);
+    }
+
+    #[test]
+    fn test_surface_mode_hides_atoms() {
+        let params = RenderMode::Surface.mode_params();
+        assert!(!params.show_atoms);
     }
 }

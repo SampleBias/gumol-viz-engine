@@ -98,9 +98,8 @@ The engine has a working instanced-rendering pipeline, full primary/secondary fi
 
 ### Priority: HIGH — Visualization
 
-- [ ] **Surface mode** — `RenderMode::Surface` defined but not implemented; UI shows "coming soon"
-- [ ] **Color schemes** — `ColorScheme` enum exists (Residue, Chain, BFactor, SecondaryStructure, etc.) but only CPK is applied at runtime
-- [ ] **B-factor coloring** — palette helper exists; no UI toggle or material update path
+- [x] **Surface mode** — coarse solvent-accessible voxel shell (`rendering/surface.rs`)
+- [x] **Color schemes** — CPK, Residue, Chain, B-factor wired to instanced colors + UI
 - [ ] **Double/triple bond meshes** — order detected; no separate visual geometry
 
 ### Priority: HIGH — Export

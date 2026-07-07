@@ -439,17 +439,20 @@ pub fn update_instanced_visualization(
     }
 }
 
-/// Highlight selected atoms by tinting instance colors yellow.
-pub fn update_instanced_selection_highlight(
+/// Update instance colors from the active color scheme and selection state.
+pub fn update_instanced_atom_colors(
+    viz_config: Res<VisualizationConfig>,
     selection: Res<SelectionState>,
     sim_data: Res<crate::systems::loading::SimulationData>,
+    timeline: Res<TimelineState>,
     index: Res<InstancedAtomIndex>,
     mut instanced_query: Query<(&InstancedAtomEntity, &mut InstancedAtomMesh)>,
 ) {
-    if !selection.is_changed() {
+    if !viz_config.is_changed() && !selection.is_changed() && !sim_data.is_changed() {
         return;
     }
 
+    let ctx = sim_data.color_context(timeline.current_frame);
     let selected: std::collections::HashSet<u32> =
         selection.selected_atom_ids.iter().copied().collect();
 
@@ -463,18 +466,16 @@ pub fn update_instanced_selection_highlight(
                 break;
             }
 
-            let cpk = sim_data
-                .atom_data
-                .iter()
-                .find(|a| a.id == atom_id)
-                .map(|a| a.element.cpk_color())
-                .unwrap_or(entity_info.element.cpk_color());
-
-            if selected.contains(&atom_id) {
-                mesh.instances[i].color = Vec4::new(1.0, 1.0, 0.0, 1.0);
+            let color = if selected.contains(&atom_id) {
+                Color::srgb(1.0, 1.0, 0.0)
+            } else if let Some(atom) = sim_data.atom_data.iter().find(|a| a.id == atom_id) {
+                viz_config.color_scheme.atom_color(atom, &ctx)
             } else {
-                mesh.instances[i].color = Vec4::new(cpk[0], cpk[1], cpk[2], 1.0);
-            }
+                let rgb = entity_info.element.cpk_color();
+                Color::srgb(rgb[0], rgb[1], rgb[2])
+            };
+
+            mesh.instances[i].color = color.to_linear().to_vec4();
         }
         mesh.mark_gpu_dirty();
     }

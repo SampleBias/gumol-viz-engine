@@ -100,9 +100,6 @@ pub fn clamp_unavailable_render_modes(
     mut config: ResMut<VisualizationConfig>,
     backbone: Res<ProteinBackbone>,
 ) {
-    if config.render_mode == RenderMode::Surface {
-        config.render_mode = RenderMode::CPK;
-    }
     if config.render_mode.shows_ribbon() && !backbone.cartoon_available {
         config.render_mode = RenderMode::CPK;
     }
