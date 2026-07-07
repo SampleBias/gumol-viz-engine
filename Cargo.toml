@@ -92,6 +92,9 @@ crossbeam-channel = "0.5"
 gltf-json = "1.4"
 base64 = "0.22"
 
+# PNG frame IO for video export
+image = { version = "0.25", default-features = false, features = ["png"] }
+
 [dev-dependencies]
 criterion = "0.5"      # Benchmarking
 proptest = "1.5"       # Property-based testing
@@ -102,7 +105,7 @@ default = []
 # Chrome trace / Tracy profiling hooks
 trace = ["bevy/trace"]
 
-# Enable video export (requires FFmpeg)
+# Enable video export (requires FFmpeg on PATH; always compiled)
 video = []
 
 # Enable all optional features

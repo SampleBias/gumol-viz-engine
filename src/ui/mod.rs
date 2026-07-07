@@ -11,6 +11,7 @@ use crate::core::visualization::{ColorScheme, RenderMode, VisualizationConfig};
 use crate::export::gltf_export::RequestExportGltfEvent;
 use crate::export::obj::RequestExportObjEvent;
 use crate::export::screenshot::RequestScreenshotEvent;
+use crate::export::video::{RequestVideoExportEvent, VideoExportSettings, VideoExportState};
 use crate::interaction::measurement::MeasurementState;
 use crate::interaction::selection::SelectionState;
 use crate::io::FileFormat;
@@ -64,11 +65,24 @@ pub struct GltfSaveState {
     receiver: Option<crossbeam_channel::Receiver<Option<std::path::PathBuf>>>,
 }
 
+/// Resource holding receiver for async video export save path
+#[derive(Resource, Default)]
+pub struct VideoSaveState {
+    receiver: Option<crossbeam_channel::Receiver<Option<std::path::PathBuf>>>,
+}
+
 #[derive(SystemParam)]
 pub struct ExportSaveStates<'w> {
     pub screenshot: ResMut<'w, ScreenshotSaveState>,
     pub obj: ResMut<'w, ObjSaveState>,
     pub gltf: ResMut<'w, GltfSaveState>,
+    pub video: ResMut<'w, VideoSaveState>,
+}
+
+#[derive(SystemParam)]
+pub struct ExportPanelState<'w> {
+    pub saves: ExportSaveStates<'w>,
+    pub video: Res<'w, VideoExportState>,
 }
 
 #[derive(SystemParam)]
@@ -225,6 +239,34 @@ pub fn export_gltf_save_poll(
     }
 }
 
+/// Poll for video export save path and send RequestVideoExportEvent
+pub fn video_save_poll(
+    mut save_state: ResMut<VideoSaveState>,
+    mut export_events: EventWriter<RequestVideoExportEvent>,
+    sim_data: Res<SimulationData>,
+) {
+    if let Some(receiver) = save_state.receiver.take() {
+        match receiver.try_recv() {
+            Ok(Some(path)) => {
+                let total = sim_data.num_frames().max(1);
+                export_events.send(RequestVideoExportEvent {
+                    output_path: path,
+                    settings: VideoExportSettings {
+                        fps: crate::export::video::DEFAULT_VIDEO_FPS,
+                        start_frame: 0,
+                        end_frame: total.saturating_sub(1),
+                    },
+                });
+            }
+            Ok(None) => {}
+            Err(crossbeam_channel::TryRecvError::Empty) => {
+                save_state.receiver = Some(receiver);
+            }
+            Err(crossbeam_channel::TryRecvError::Disconnected) => {}
+        }
+    }
+}
+
 #[derive(SystemParam)]
 pub struct TopologyUiState<'w> {
     pub topology_state: Res<'w, TopologyState>,
@@ -242,7 +284,7 @@ pub fn main_ui_panel(
     perf_diag: Res<PerformanceDiagnostics>,
     cli_arg: Res<CliFileArg>,
     mut picker_state: ResMut<FilePickerState>,
-    mut export_saves: ExportSaveStates,
+    mut export_panel: ExportPanelState,
     mut load_errors: EventReader<FileLoadErrorEvent>,
     mut timeline: ResMut<TimelineState>,
     timeline_frames: Res<crate::systems::frame_cache::TimelineFrames>,
@@ -772,10 +814,16 @@ pub fn main_ui_panel(
             ui.heading("Export");
             ui.separator();
 
-            let screenshot_pending = export_saves.screenshot.receiver.is_some();
-            let obj_pending = export_saves.obj.receiver.is_some();
-            let gltf_pending = export_saves.gltf.receiver.is_some();
-            let any_export_pending = screenshot_pending || obj_pending || gltf_pending;
+            let screenshot_pending = export_panel.saves.screenshot.receiver.is_some();
+            let obj_pending = export_panel.saves.obj.receiver.is_some();
+            let gltf_pending = export_panel.saves.gltf.receiver.is_some();
+            let video_dialog_pending = export_panel.saves.video.receiver.is_some();
+            let video_recording = export_panel.video.status
+                != crate::export::video::VideoExportStatus::Idle;
+            let any_export_pending = screenshot_pending
+                || obj_pending
+                || gltf_pending
+                || video_dialog_pending;
 
             if ui
                 .add_enabled(
@@ -785,7 +833,7 @@ pub fn main_ui_panel(
                 .clicked()
             {
                 let (tx, rx) = crossbeam_channel::unbounded();
-                export_saves.screenshot.receiver = Some(rx);
+                export_panel.saves.screenshot.receiver = Some(rx);
 
                 std::thread::spawn(move || {
                     let result = rfd::FileDialog::new()
@@ -805,7 +853,7 @@ pub fn main_ui_panel(
                 .clicked()
             {
                 let (tx, rx) = crossbeam_channel::unbounded();
-                export_saves.obj.receiver = Some(rx);
+                export_panel.saves.obj.receiver = Some(rx);
 
                 std::thread::spawn(move || {
                     let result = rfd::FileDialog::new()
@@ -824,7 +872,7 @@ pub fn main_ui_panel(
                 .clicked()
             {
                 let (tx, rx) = crossbeam_channel::unbounded();
-                export_saves.gltf.receiver = Some(rx);
+                export_panel.saves.gltf.receiver = Some(rx);
 
                 std::thread::spawn(move || {
                     let result = rfd::FileDialog::new()
@@ -833,6 +881,49 @@ pub fn main_ui_panel(
                         .save_file();
                     let _ = tx.send(result);
                 });
+            }
+
+            if ui
+                .add_enabled(
+                    sim_data.loaded
+                        && sim_data.num_frames() > 0
+                        && !video_dialog_pending
+                        && !video_recording,
+                    bevy_egui::egui::Button::new("🎬 Record video..."),
+                )
+                .clicked()
+            {
+                let (tx, rx) = crossbeam_channel::unbounded();
+                export_panel.saves.video.receiver = Some(rx);
+
+                std::thread::spawn(move || {
+                    let result = rfd::FileDialog::new()
+                        .add_filter("MP4 video", &["mp4"])
+                        .add_filter("WebM video", &["webm"])
+                        .add_filter("GIF animation", &["gif"])
+                        .set_file_name("trajectory.mp4")
+                        .save_file();
+                    let _ = tx.send(result);
+                });
+            }
+
+            if video_recording {
+                if let Some(ref msg) = export_panel.video.message {
+                    ui.label(
+                        bevy_egui::egui::RichText::new(msg.as_str())
+                            .color(bevy_egui::egui::Color32::LIGHT_BLUE),
+                    );
+                }
+                if export_panel.video.progress >= 0.0 {
+                    ui.add(
+                        bevy_egui::egui::ProgressBar::new(export_panel.video.progress)
+                            .show_percentage(),
+                    );
+                } else {
+                    ui.label(
+                        bevy_egui::egui::RichText::new("Encoding…").italics(),
+                    );
+                }
             }
 
             if any_export_pending {
@@ -890,6 +981,7 @@ pub fn register(app: &mut App) {
         .init_resource::<ScreenshotSaveState>()
         .init_resource::<ObjSaveState>()
         .init_resource::<GltfSaveState>()
+        .init_resource::<VideoSaveState>()
         .add_systems(
             Update,
             (
@@ -899,6 +991,7 @@ pub fn register(app: &mut App) {
                 screenshot_save_poll,
                 export_obj_save_poll,
                 export_gltf_save_poll,
+                video_save_poll,
                 render_mode_shortcuts,
             ),
         )

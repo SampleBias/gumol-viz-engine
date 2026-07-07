@@ -31,7 +31,7 @@ Gumol Viz Engine provides interactive, game-like visualization of molecular stru
 - **📤 Export** (implemented):
   - Screenshots (PNG, JPEG)
   - 3D models (OBJ, glTF)
-  - Video (MP4/WebM) and POV-Ray — planned
+  - Video (MP4/WebM/GIF) via FFmpeg subprocess
 - **🔬 Analysis** (implemented):
   - Distance, angle, and dihedral measurements from selected atoms
   - B-factor coloring — palette defined, runtime toggle not yet wired
@@ -295,7 +295,7 @@ Read the [Development Plan](docs/DEVELOPMENT_PLAN.md) and [Architecture Guide](d
 ### Version 0.2.0 — Polish (in progress)
 - [x] Surface rendering mode (coarse SAS voxel shell)
 - [x] Runtime color schemes (CPK, Residue, Chain, B-factor)
-- [ ] Video export (FFmpeg, `video` feature)
+- [x] Video export (FFmpeg; `cargo run` — requires `ffmpeg` on PATH)
 - [ ] POV-Ray export
 - [ ] Box selection and atom labels
 - [ ] `timeline_demo` and `interactive_selection` examples

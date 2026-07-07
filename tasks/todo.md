@@ -104,7 +104,7 @@ The engine has a working instanced-rendering pipeline, full primary/secondary fi
 
 ### Priority: HIGH — Export
 
-- [ ] **Video export** — `video` Cargo feature declared; no `export/video.rs` or FFmpeg integration
+- [x] **Video export** — `export/video.rs`; FFmpeg subprocess; `video` Cargo feature; UI record button
 - [ ] **POV-Ray export** — mentioned in README/lib docs; not implemented
 
 ### Priority: HIGH — Performance Validation

@@ -5,6 +5,7 @@ pub mod mesh_export;
 pub mod obj;
 pub mod scene_snapshot;
 pub mod screenshot;
+pub mod video;
 
 use bevy::prelude::*;
 
@@ -13,5 +14,6 @@ pub fn register(app: &mut App) {
     screenshot::register(app);
     obj::register(app);
     gltf_export::register(app);
+    video::register(app);
     info!("Export module registered");
 }
