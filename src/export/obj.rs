@@ -48,6 +48,11 @@ pub fn handle_export_obj(
     }
 }
 
+/// Write a scene snapshot to an OBJ file on disk.
+pub fn write_obj_to_path(path: &std::path::Path, data: &SceneSnapshot) -> std::io::Result<()> {
+    write_obj(&path.to_path_buf(), data)
+}
+
 fn write_obj(path: &PathBuf, data: &SceneSnapshot) -> std::io::Result<()> {
     let file = File::create(path)?;
     let mut w = BufWriter::new(file);

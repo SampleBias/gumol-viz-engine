@@ -164,6 +164,7 @@ let style = VisualizationStyle::new(RenderMode::BallAndStick);
 - **[Profiling Guide](docs/PROFILING.md)** — benchmarks and hotspot analysis
 - **[Setup Guide](docs/SETUP.md)** — development environment
 - **[Task List](tasks/todo.md)** — current implementation status
+- **[Validation Report](docs/VALIDATION.md)** — Sprint 1 automated + manual QA checklist
 
 ```bash
 cargo doc --no-deps --open

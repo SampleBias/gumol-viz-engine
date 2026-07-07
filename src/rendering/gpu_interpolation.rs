@@ -153,6 +153,20 @@ fn dense_positions(frame: &crate::core::trajectory::FrameData, atom_ids: &[u32])
         .collect()
 }
 
+/// CPU reference matching `assets/shaders/atom_interpolate.wgsl` (`mix(a, b, alpha)`).
+pub fn interpolate_dense_positions(
+    positions_a: &[Vec3],
+    positions_b: &[Vec3],
+    alpha: f32,
+) -> Vec<Vec3> {
+    debug_assert_eq!(positions_a.len(), positions_b.len());
+    positions_a
+        .iter()
+        .zip(positions_b)
+        .map(|(a, b)| a.lerp(*b, alpha))
+        .collect()
+}
+
 /// Apply GPU-interpolated positions to instanced meshes.
 pub fn apply_gpu_interpolated_positions(
     gpu_active: Res<GpuInterpolationActive>,
@@ -242,18 +256,17 @@ impl Plugin for GpuInterpolationRenderPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(ExtractResourcePlugin::<GpuInterpolationExtract>::default());
 
-        app.sub_app_mut(RenderApp)
-            .add_systems(
-                Render,
-                (
-                    prepare_interpolation_buffers
-                        .in_set(RenderSet::PrepareResources)
-                        .run_if(resource_exists::<InterpolationBuffers>),
-                    prepare_interpolation_bind_group
-                        .in_set(RenderSet::PrepareBindGroups)
-                        .run_if(resource_changed::<InterpolationBuffers>),
-                ),
-            );
+        app.sub_app_mut(RenderApp).add_systems(
+            Render,
+            (
+                prepare_interpolation_buffers
+                    .in_set(RenderSet::PrepareResources)
+                    .run_if(resource_exists::<InterpolationBuffers>),
+                prepare_interpolation_bind_group
+                    .in_set(RenderSet::PrepareBindGroups)
+                    .run_if(resource_changed::<InterpolationBuffers>),
+            ),
+        );
 
         app.sub_app_mut(RenderApp)
             .world_mut()
@@ -586,5 +599,39 @@ mod tests {
     #[test]
     fn test_interpolation_uniforms_size() {
         assert_eq!(std::mem::size_of::<InterpolationUniformsGpu>(), 16);
+    }
+
+    #[test]
+    fn test_dense_interpolation_matches_trajectory_lerp() {
+        use crate::core::atom::{AtomData, Element};
+        use crate::core::trajectory::{interpolate_frames, FrameData};
+
+        let atoms = vec![
+            AtomData::new(0, Element::O, 0, "HOH".into(), "A".into(), "O".into()),
+            AtomData::new(1, Element::H, 0, "HOH".into(), "A".into(), "H1".into()),
+        ];
+        let layout = DenseAtomLayout::build(&atoms);
+
+        let mut frame_a = FrameData::new(0, 0.0);
+        frame_a.set_position(0, Vec3::new(0.0, 0.0, 0.0));
+        frame_a.set_position(1, Vec3::new(1.0, 0.0, 0.0));
+
+        let mut frame_b = FrameData::new(1, 1.0);
+        frame_b.set_position(0, Vec3::new(0.0, 0.1, 0.0));
+        frame_b.set_position(1, Vec3::new(1.0, 0.2, 0.0));
+
+        let alpha = 0.35;
+        let pos_a = dense_positions(&frame_a, &layout.dense_atom_ids);
+        let pos_b = dense_positions(&frame_b, &layout.dense_atom_ids);
+        let dense = interpolate_dense_positions(&pos_a, &pos_b, alpha);
+
+        let expected = interpolate_frames(&frame_a, &frame_b, alpha);
+        for (i, &atom_id) in layout.dense_atom_ids.iter().enumerate() {
+            assert_eq!(
+                dense[i],
+                expected.get_position(atom_id).unwrap(),
+                "atom {atom_id} mismatch"
+            );
+        }
     }
 }

@@ -92,8 +92,8 @@ The engine has a working instanced-rendering pipeline, full primary/secondary fi
 
 ### Priority: CRITICAL
 
-- [ ] Fix `test_gumol_viz_plugin_registers` — GPU interpolation plugin requires `RenderDevice` in headless test world
-- [ ] Fix clippy warnings (`gpu_interpolation.rs` dead code; CI runs `clippy -D warnings`)
+- [x] Fix `test_gumol_viz_plugin_registers` — GPU interpolation plugin requires `RenderDevice` in headless test world
+- [x] Fix clippy warnings (`gpu_interpolation.rs` dead code; CI runs `clippy -D warnings`)
 - [ ] Verify `dev_dynamic` profile works end-to-end (panic = unwind profile exists; manual test still open)
 
 ### Priority: HIGH — Visualization
@@ -110,10 +110,11 @@ The engine has a working instanced-rendering pipeline, full primary/secondary fi
 
 ### Priority: HIGH — Performance Validation
 
-- [ ] Prove 10K-atom load + playback targets (benchmarks exist; formal pass criteria not recorded)
-- [ ] Prove 100K-atom @ 60 FPS target
-- [ ] Validate GPU interpolation accuracy and perf vs CPU fallback
-- [ ] Enforce benchmark regression gate in CI (script exists; smoke job on main only)
+- [x] Prove 10K-atom load + playback targets (benchmarks + `tests/sprint1_validation.rs`)
+- [x] Prove 100K-atom position-sync @ 60 FPS budget (criterion ~3.9 ms; see `docs/VALIDATION.md`)
+- [x] Validate GPU interpolation CPU reference parity (unit + integration tests)
+- [x] Enforce benchmark regression gate in CI (script exists; `bench-regression` job on PR/push)
+- [ ] Full interactive 100K @ 60 FPS with bonds + UI (profiling pass pending)
 - [ ] Parallel trajectory parsing with `rayon` (dependency present; not wired)
 
 ### Priority: MEDIUM — Interaction & Camera
@@ -153,6 +154,8 @@ The engine has a working instanced-rendering pipeline, full primary/secondary fi
 
 ### Priority: LOW — Manual QA (unchecked from earlier phases)
 
+See interactive checklist in `docs/VALIDATION.md`.
+
 - [ ] Manual test: single and multi-atom selection in running app
 - [ ] Manual test: measurements on selected atoms in running app
 - [ ] Manual test: bond detection on protein structures (e.g. 1CRN)
@@ -182,7 +185,13 @@ The engine has a working instanced-rendering pipeline, full primary/secondary fi
 - [ ] Puffin/Tracy profiling integration (Bevy `trace` feature available; puffin not added)
 - [ ] Parallel file parsing with rayon
 
-### 2026-07-06 — Status sync
+### 2026-07-07 — Sprint 1 validation
+- [x] Automated validation tests (`tests/sprint1_validation.rs`)
+- [x] GPU/CPU interpolation parity tests
+- [x] Benchmark regression baseline refresh + `docs/VALIDATION.md`
+- [ ] Interactive manual QA checklist (see VALIDATION.md)
+
+---
 - [x] Codebase review against todo list
 - [x] Updated this file to reflect actual implementation state
 

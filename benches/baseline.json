@@ -15,9 +15,9 @@
     "timeline_position_update/1000": 45624,
     "timeline_position_update/10000": 515010,
     "frame_position_dense/1000": 14743,
-    "frame_position_dense/10000": 186150,
+    "frame_position_dense/10000": 224000,
     "frame_position_dense/100000": 3272100,
     "bond_detection_spatial/1000": 2426500,
-    "bond_detection_spatial/10000": 166360000
+    "bond_detection_spatial/10000": 204790000
   }
 }

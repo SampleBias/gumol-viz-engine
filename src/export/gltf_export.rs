@@ -59,6 +59,11 @@ pub fn handle_export_gltf(
     }
 }
 
+/// Write a scene snapshot to a glTF JSON file on disk.
+pub fn write_gltf_to_path(path: &std::path::Path, data: &SceneSnapshot) -> std::io::Result<()> {
+    write_gltf(&path.to_path_buf(), data)
+}
+
 fn write_gltf(path: &PathBuf, data: &SceneSnapshot) -> std::io::Result<()> {
     let mut positions: Vec<f32> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
