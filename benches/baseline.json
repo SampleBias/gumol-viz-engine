@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "max_regression_ratio": 1.2,
+  "description": "Criterion mean times (nanoseconds) from release bench on Linux. CI fails if >20% slower.",
+  "benchmarks": {
+    "instance_data_build/1000": 14627,
+    "instance_data_build/10000": 170320,
+    "instance_data_build/100000": 3426100,
+    "instanced_spawn/1000": 142140,
+    "instanced_spawn/10000": 726210,
+    "instanced_spawn/100000": 13914000,
+    "draw_call_count/1000": 14888,
+    "draw_call_count/10000": 153410,
+    "draw_call_count/100000": 1692300,
+    "timeline_position_update/1000": 45624,
+    "timeline_position_update/10000": 515010,
+    "frame_position_dense/1000": 14743,
+    "frame_position_dense/10000": 186150,
+    "frame_position_dense/100000": 3272100,
+    "bond_detection_spatial/1000": 2426500,
+    "bond_detection_spatial/10000": 166360000
+  }
+}

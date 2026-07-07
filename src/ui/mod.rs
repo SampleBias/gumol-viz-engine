@@ -245,6 +245,7 @@ pub fn main_ui_panel(
     mut export_saves: ExportSaveStates,
     mut load_errors: EventReader<FileLoadErrorEvent>,
     mut timeline: ResMut<TimelineState>,
+    timeline_frames: Res<crate::systems::frame_cache::TimelineFrames>,
     mut selection: ResMut<SelectionState>,
     measurements: Res<MeasurementState>,
     mut commands: Commands,
@@ -420,6 +421,23 @@ pub fn main_ui_panel(
                         ))
                         .small()
                         .italics(),
+                    );
+                }
+
+                if timeline_frames.loading {
+                    ui.label(
+                        bevy_egui::egui::RichText::new("Loading frame…")
+                            .color(bevy_egui::egui::Color32::YELLOW),
+                    );
+                }
+
+                if timeline_frames.streaming {
+                    ui.label(
+                        bevy_egui::egui::RichText::new(format!(
+                            "Streaming: {} cached frames",
+                            timeline_frames.cached_count
+                        ))
+                        .small(),
                     );
                 }
 

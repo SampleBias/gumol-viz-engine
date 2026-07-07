@@ -352,21 +352,30 @@ pub fn center_camera_on_file_load_instanced(
 pub fn update_instanced_positions_from_timeline(
     sim_data: Res<crate::systems::loading::SimulationData>,
     timeline: Res<TimelineState>,
+    frames: Res<crate::systems::frame_cache::TimelineFrames>,
+    gpu_active: Res<crate::rendering::gpu_interpolation::GpuInterpolationActive>,
+    perf: Res<crate::performance::PerformanceSettings>,
     index: Res<InstancedAtomIndex>,
     mut instanced_query: Query<(&InstancedAtomEntity, &mut InstancedAtomMesh)>,
 ) {
-    if !timeline.is_changed() || !sim_data.loaded || sim_data.num_frames() == 0 {
+    if gpu_active.0 && perf.gpu_interpolation_enabled {
         return;
     }
 
-    let current_frame = match sim_data.get_frame(timeline.current_frame) {
-        Some(f) => f,
-        None => return,
+    if !timeline.is_changed() && !frames.is_changed() {
+        return;
+    }
+
+    if !sim_data.loaded || sim_data.num_frames() == 0 {
+        return;
+    }
+
+    let Some(current_frame) = frames.current.as_ref() else {
+        return;
     };
 
     let next_frame = if timeline.interpolate && timeline.interpolation_factor > 0.0 {
-        let next_idx = (timeline.current_frame + 1).min(sim_data.num_frames() - 1);
-        sim_data.get_frame(next_idx)
+        frames.next.as_ref()
     } else {
         None
     };
@@ -388,7 +397,7 @@ pub fn update_instanced_positions_from_timeline(
                 None => continue,
             };
 
-            let position = if let Some(ref nf) = next_frame {
+            let position = if let Some(nf) = next_frame {
                 if let Some(next_pos) = nf.get_position(atom_id) {
                     current_pos.lerp(next_pos, timeline.interpolation_factor)
                 } else {

@@ -77,6 +77,7 @@ pub fn update_timeline(
 pub fn update_atom_positions_from_timeline(
     sim_data: Res<crate::systems::loading::SimulationData>,
     timeline: Res<TimelineState>,
+    frames: Res<crate::systems::frame_cache::TimelineFrames>,
     mut atom_query: Query<(
         &crate::systems::spawning::SpawnedAtom,
         &mut Transform,
@@ -87,16 +88,12 @@ pub fn update_atom_positions_from_timeline(
         return;
     }
 
-    let current_frame = timeline.current_frame;
-
-    let current_frame_data = match sim_data.get_frame(current_frame) {
-        Some(frame) => frame,
-        None => return,
+    let Some(current_frame_data) = frames.current.as_ref() else {
+        return;
     };
 
     let next_frame_data = if timeline.interpolate && timeline.interpolation_factor > 0.0 {
-        let next_frame = (current_frame + 1).min(sim_data.num_frames() - 1);
-        sim_data.get_frame(next_frame)
+        frames.next.as_ref()
     } else {
         None
     };
@@ -128,6 +125,7 @@ pub fn update_atom_positions_from_timeline(
 pub fn handle_timeline_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut timeline: ResMut<TimelineState>,
+    mut perf: ResMut<crate::performance::PerformanceSettings>,
     sim_data: Res<crate::systems::loading::SimulationData>,
 ) {
     if !sim_data.loaded || sim_data.num_frames() == 0 {
@@ -196,6 +194,19 @@ pub fn handle_timeline_input(
     if keyboard.just_pressed(KeyCode::KeyI) {
         timeline.interpolate = !timeline.interpolate;
         info!("Interpolation: {}", timeline.interpolate);
+    }
+
+    // G: Toggle GPU interpolation
+    if keyboard.just_pressed(KeyCode::KeyG) {
+        perf.gpu_interpolation_enabled = !perf.gpu_interpolation_enabled;
+        info!(
+            "GPU interpolation: {}",
+            if perf.gpu_interpolation_enabled {
+                "enabled"
+            } else {
+                "disabled (CPU fallback)"
+            }
+        );
     }
 }
 

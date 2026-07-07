@@ -10,25 +10,41 @@ fn main() {
 
     info!("Starting Gumol Viz Engine v{}", gumol_viz_engine::VERSION);
 
-    App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Gumol Viz Engine".to_string(),
-                resolution: (1920., 1080.).into(),
-                present_mode: bevy::window::PresentMode::AutoVsync,
-                resizable: true,
-                ..default()
-            }),
+    #[cfg(feature = "trace")]
+    info!(
+        "Trace feature enabled — run with Chrome tracing: \
+         RUST_LOG=info,bevy_render=debug cargo run --release --features trace"
+    );
+
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "Gumol Viz Engine".to_string(),
+            resolution: (1920., 1080.).into(),
+            present_mode: bevy::window::PresentMode::AutoVsync,
+            resizable: true,
             ..default()
-        }))
-        .add_plugins(bevy_egui::EguiPlugin)
-        .add_plugins(bevy_mod_picking::DefaultPickingPlugins)
-        .add_plugins(bevy_panorbit_camera::PanOrbitCameraPlugin)
-        .add_plugins(GumolVizPlugin)
-        .add_systems(Startup, setup_scene)
-        .add_systems(Startup, load_default_trajectory)
-        .add_systems(Update, toggle_fullscreen)
-        .run();
+        }),
+        ..default()
+    }))
+    .add_plugins(bevy_egui::EguiPlugin)
+    .add_plugins(bevy_mod_picking::DefaultPickingPlugins)
+    .add_plugins(bevy_panorbit_camera::PanOrbitCameraPlugin)
+    .add_plugins(GumolVizPlugin)
+    .add_systems(Startup, setup_scene)
+    .add_systems(Startup, load_default_trajectory)
+    .add_systems(Update, toggle_fullscreen);
+
+    #[cfg(feature = "trace")]
+    {
+        use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
+        app.add_plugins((
+            LogDiagnosticsPlugin::default(),
+            FrameTimeDiagnosticsPlugin::default(),
+        ));
+    }
+
+    app.run();
 }
 
 /// Camera and lighting only — atoms render through the instanced pipeline after file load.

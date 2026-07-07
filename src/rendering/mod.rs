@@ -2,9 +2,11 @@
 
 pub mod atom_index;
 pub mod culling;
+pub mod gpu_interpolation;
 pub mod instanced;
 pub mod lod;
 pub mod lod_system;
+pub mod material_pool;
 pub mod mesh_pool;
 pub mod ribbon;
 pub mod wireframe;
@@ -20,9 +22,11 @@ const RENDER_ASSET_USAGES: bevy::render::render_asset::RenderAssetUsages =
 /// Register all rendering systems
 pub fn register(app: &mut App) {
     instanced::register(app);
+    gpu_interpolation::register(app);
     wireframe::register(app);
     ribbon::register(app);
     mesh_pool::register(app);
+    material_pool::register(app);
     info!("Rendering module registered");
 }
 

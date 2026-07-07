@@ -40,10 +40,14 @@ pub fn cull_instanced_atoms(
     for (entity_info, mut mesh) in instanced.iter_mut() {
         mesh.mode_scale = base_scale;
         let world_radius = entity_info.element.vdw_radius() * 0.5 * base_scale;
+        let mut mesh_changed = false;
 
         for instance in mesh.instances.iter_mut() {
             if base_scale <= 0.0 {
-                instance.scale = 0.0;
+                if instance.scale != 0.0 {
+                    instance.scale = 0.0;
+                    mesh_changed = true;
+                }
                 continue;
             }
 
@@ -58,13 +62,21 @@ pub fn cull_instanced_atoms(
                 true
             };
 
-            instance.scale = if visible_instance { base_scale } else { 0.0 };
+            let new_scale = if visible_instance { base_scale } else { 0.0 };
+            if (instance.scale - new_scale).abs() > f32::EPSILON {
+                instance.scale = new_scale;
+                mesh_changed = true;
+            }
 
             if visible_instance {
                 visible += 1;
             } else {
                 culled += 1;
             }
+        }
+
+        if mesh_changed {
+            mesh.mark_gpu_dirty();
         }
     }
 

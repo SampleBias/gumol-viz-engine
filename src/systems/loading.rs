@@ -136,6 +136,11 @@ impl SimulationData {
         self.frame_provider.is_some()
     }
 
+    /// Access the streaming frame provider when present.
+    pub fn frame_provider(&self) -> Option<Arc<dyn FrameProvider>> {
+        self.frame_provider.clone()
+    }
+
     /// Get the total simulation time
     pub fn total_time(&self) -> f32 {
         self.trajectory.total_time

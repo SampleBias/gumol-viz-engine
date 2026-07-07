@@ -9,6 +9,7 @@
 //!            -> visualization + selection highlight
 
 pub mod bonds;
+pub mod frame_cache;
 pub mod loading;
 pub mod spawning;
 pub mod timeline;
@@ -25,6 +26,7 @@ pub fn register(app: &mut App) {
     loading::register(app);
     spawning::register(app);
     timeline::register(app);
+    frame_cache::register(app);
     bonds::register(app);
     visualization::register(app);
 
@@ -50,9 +52,15 @@ pub fn register(app: &mut App) {
                 crate::rendering::ribbon::clear_ribbon_on_load,
                 bonds::clear_bonds_on_load,
                 timeline::update_timeline_on_load,
+                frame_cache::clear_frame_cache_on_load,
+                crate::rendering::gpu_interpolation::clear_dense_layout_on_load,
             ),
             // Group 3: spawn instanced atoms, pick proxies, and index
-            crate::rendering::instanced::spawn_instanced_atoms_on_load,
+            (
+                crate::rendering::instanced::spawn_instanced_atoms_on_load,
+                crate::rendering::gpu_interpolation::build_dense_layout_on_spawn,
+            )
+                .chain(),
             crate::rendering::instanced::center_camera_on_file_load_instanced,
             // Group 4: bonds, wireframe, ribbon after instanced atoms exist
             (
@@ -64,9 +72,16 @@ pub fn register(app: &mut App) {
             ),
             // Group 5: timeline advancement
             timeline::update_timeline,
+            // Group 5b: frame cache + GPU interpolation prep
+            (
+                frame_cache::resolve_timeline_frames,
+                frame_cache::prefetch_during_playback,
+                crate::rendering::gpu_interpolation::prepare_gpu_interpolation_extract,
+            ),
             // Group 6: position updates
             (
                 crate::rendering::instanced::update_instanced_positions_from_timeline,
+                crate::rendering::gpu_interpolation::apply_gpu_interpolated_positions,
                 crate::interaction::pick_proxy::update_pick_proxy_positions,
                 bonds::update_bond_positions,
                 crate::rendering::wireframe::update_wireframe_bond_positions,

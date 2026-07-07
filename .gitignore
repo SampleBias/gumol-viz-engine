@@ -1,4 +1,6 @@
-# Rust
+__pycache__/
+*.py[cod]
+
 /target/
 **/*.rs.bk
 *.pdb

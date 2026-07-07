@@ -17,6 +17,8 @@ pub struct PerformanceSettings {
     pub spatial_bond_threshold: usize,
     /// Maximum pick-proxy entities (selection disabled above this).
     pub max_pick_proxies: usize,
+    /// GPU compute interpolation for timeline playback (falls back to CPU if unavailable).
+    pub gpu_interpolation_enabled: bool,
 }
 
 impl Default for PerformanceSettings {
@@ -27,6 +29,7 @@ impl Default for PerformanceSettings {
             spatial_bond_detection: true,
             spatial_bond_threshold: 500,
             max_pick_proxies: 50_000,
+            gpu_interpolation_enabled: true,
         }
     }
 }

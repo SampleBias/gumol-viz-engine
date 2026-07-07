@@ -51,3 +51,17 @@ jobs:
 
       - name: Run rendering benchmarks (smoke)
         run: cargo bench --bench rendering -- --sample-size 10
+
+  bench-regression:
+    name: Benchmark regression (20% gate)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check benchmark regression against baseline
+        run: python3 scripts/check_bench_regression.py
