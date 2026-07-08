@@ -28,9 +28,9 @@ pub fn build_backbone_on_load(
     sim_data: Res<crate::systems::loading::SimulationData>,
     index: Res<InstancedAtomIndex>,
     instanced: Query<(&InstancedAtomEntity, &InstancedAtomMesh)>,
-    spawned_events: EventReader<InstancedAtomsSpawnedEvent>,
+    mut spawned_events: EventReader<InstancedAtomsSpawnedEvent>,
 ) {
-    if spawned_events.is_empty() {
+    if spawned_events.read().next().is_none() {
         return;
     }
 
@@ -58,9 +58,9 @@ pub fn spawn_ribbon_on_load(
     backbone: Res<ProteinBackbone>,
     viz_config: Res<VisualizationConfig>,
     mut ribbon_entities: ResMut<RibbonEntities>,
-    spawned_events: EventReader<InstancedAtomsSpawnedEvent>,
+    mut spawned_events: EventReader<InstancedAtomsSpawnedEvent>,
 ) {
-    if spawned_events.is_empty() || !ribbon_entities.entities.is_empty() {
+    if spawned_events.read().next().is_none() || !ribbon_entities.entities.is_empty() {
         return;
     }
 
@@ -190,9 +190,9 @@ pub fn clear_ribbon_on_load(
     mut commands: Commands,
     mut ribbon_entities: ResMut<RibbonEntities>,
     mut backbone: ResMut<ProteinBackbone>,
-    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
 ) {
-    if file_loaded_events.is_empty() {
+    if file_loaded_events.read().next().is_none() {
         return;
     }
 

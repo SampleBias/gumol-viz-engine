@@ -7,9 +7,9 @@ struct InterpolationUniforms {
     _padding: vec2<f32>,
 }
 
-@group(0) @binding(0) var<storage, read> positions_a: array<vec3<f32>>;
-@group(0) @binding(1) var<storage, read> positions_b: array<vec3<f32>>;
-@group(0) @binding(2) var<storage, read_write> positions_out: array<vec3<f32>>;
+@group(0) @binding(0) var<storage, read> positions_a: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read> positions_b: array<vec4<f32>>;
+@group(0) @binding(2) var<storage, read_write> positions_out: array<vec4<f32>>;
 @group(0) @binding(3) var<uniform> uniforms: InterpolationUniforms;
 
 @compute @workgroup_size(256)
@@ -19,7 +19,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return;
     }
 
-    let pos_a = positions_a[atom_idx];
-    let pos_b = positions_b[atom_idx];
-    positions_out[atom_idx] = mix(pos_a, pos_b, uniforms.alpha);
+    let pos_a = positions_a[atom_idx].xyz;
+    let pos_b = positions_b[atom_idx].xyz;
+    positions_out[atom_idx] = vec4(mix(pos_a, pos_b, uniforms.alpha), 0.0);
 }

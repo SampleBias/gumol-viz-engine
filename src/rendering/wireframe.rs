@@ -87,9 +87,9 @@ pub fn spawn_wireframe_bonds(
     index: Res<InstancedAtomIndex>,
     instanced: Query<(&InstancedAtomEntity, &InstancedAtomMesh)>,
     mut wireframe_entities: ResMut<WireframeBondEntities>,
-    spawned_events: EventReader<InstancedAtomsSpawnedEvent>,
+    mut spawned_events: EventReader<InstancedAtomsSpawnedEvent>,
 ) {
-    if spawned_events.is_empty() || wireframe_entities.entity.is_some() {
+    if spawned_events.read().next().is_none() || wireframe_entities.entity.is_some() {
         return;
     }
 
@@ -210,9 +210,9 @@ pub fn update_wireframe_visibility(
 pub fn clear_wireframe_on_load(
     mut commands: Commands,
     mut wireframe_entities: ResMut<WireframeBondEntities>,
-    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
 ) {
-    if file_loaded_events.is_empty() {
+    if file_loaded_events.read().next().is_none() {
         return;
     }
 

@@ -1,3 +1,4 @@
+use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::prelude::*;
 use gumol_viz_engine::systems::loading::{CliFileArg, LoadFileEvent};
 use gumol_viz_engine::GumolVizPlugin;
@@ -53,6 +54,7 @@ fn setup_scene(mut commands: Commands) {
 
     commands.spawn((
         Camera3dBundle {
+            tonemapping: Tonemapping::ReinhardLuminance,
             transform: Transform::from_xyz(0.0, 0.0, 15.0).looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         },

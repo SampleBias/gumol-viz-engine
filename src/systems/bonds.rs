@@ -383,10 +383,10 @@ pub fn spawn_bonds(
     perf: Res<PerformanceSettings>,
     spatial_index: Res<AtomSpatialIndex>,
     mut diagnostics: ResMut<crate::performance::PerformanceDiagnostics>,
-    spawned_events: EventReader<crate::rendering::instanced::InstancedAtomsSpawnedEvent>,
+    mut spawned_events: EventReader<crate::rendering::instanced::InstancedAtomsSpawnedEvent>,
     mut bond_spawned: EventWriter<BondsSpawnedEvent>,
 ) {
-    if spawned_events.is_empty() || !bond_entities.entities.is_empty() {
+    if spawned_events.read().next().is_none() || !bond_entities.entities.is_empty() {
         return;
     }
 
@@ -508,17 +508,19 @@ pub fn despawn_all_bonds(
 pub fn clear_bonds_on_load(
     mut commands: Commands,
     mut bond_entities: ResMut<BondEntities>,
-    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
     mut despawned_event: EventWriter<BondsDespawnedEvent>,
 ) {
-    if !file_loaded_events.is_empty() && !bond_entities.entities.is_empty() {
-        for (_, entity) in bond_entities.entities.drain() {
-            commands.entity(entity).despawn_recursive();
-        }
-
-        despawned_event.send(BondsDespawnedEvent);
-        info!("Bonds cleared on file load");
+    if file_loaded_events.read().next().is_none() || bond_entities.entities.is_empty() {
+        return;
     }
+
+    for (_, entity) in bond_entities.entities.drain() {
+        commands.entity(entity).despawn_recursive();
+    }
+
+    despawned_event.send(BondsDespawnedEvent);
+    info!("Bonds cleared on file load");
 }
 
 pub fn build_spatial_index_on_spawn(
@@ -526,9 +528,9 @@ pub fn build_spatial_index_on_spawn(
     index: Res<InstancedAtomIndex>,
     instanced: Query<(&InstancedAtomEntity, &InstancedAtomMesh)>,
     mut spatial_index: ResMut<AtomSpatialIndex>,
-    spawned_events: EventReader<crate::rendering::instanced::InstancedAtomsSpawnedEvent>,
+    mut spawned_events: EventReader<crate::rendering::instanced::InstancedAtomsSpawnedEvent>,
 ) {
-    if spawned_events.is_empty() || !sim_data.loaded {
+    if spawned_events.read().next().is_none() || !sim_data.loaded {
         return;
     }
 
@@ -542,11 +544,12 @@ pub fn build_spatial_index_on_spawn(
 
 pub fn clear_spatial_index_on_load(
     mut spatial_index: ResMut<AtomSpatialIndex>,
-    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
 ) {
-    if !file_loaded_events.is_empty() {
-        spatial_index.clear();
+    if file_loaded_events.read().next().is_none() {
+        return;
     }
+    spatial_index.clear();
 }
 
 pub fn register(app: &mut App) {

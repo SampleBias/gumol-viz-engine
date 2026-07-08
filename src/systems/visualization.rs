@@ -100,6 +100,9 @@ pub fn clamp_unavailable_render_modes(
     mut config: ResMut<VisualizationConfig>,
     backbone: Res<ProteinBackbone>,
 ) {
+    if !config.is_changed() && !backbone.is_changed() {
+        return;
+    }
     if config.render_mode.shows_ribbon() && !backbone.cartoon_available {
         config.render_mode = RenderMode::CPK;
     }
@@ -110,13 +113,13 @@ pub fn sync_mode_params(
     mut config: ResMut<VisualizationConfig>,
     mut last_mode: Local<Option<RenderMode>>,
     mut mode_events: EventWriter<VisualizationModeChangedEvent>,
-    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
 ) {
     let mode_changed = match *last_mode {
         Some(prev) => prev != config.render_mode,
         None => true,
     };
-    let file_loaded = !file_loaded_events.is_empty();
+    let file_loaded = file_loaded_events.read().next().is_some();
 
     if !mode_changed && !file_loaded {
         return;

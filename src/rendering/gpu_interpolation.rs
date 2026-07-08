@@ -15,7 +15,7 @@ use bevy::render::{
     extract_resource::{ExtractResource, ExtractResourcePlugin},
     render_graph::{self, RenderGraph, RenderLabel},
     render_resource::{
-        binding_types::{storage_buffer, uniform_buffer_sized},
+        binding_types::{storage_buffer_sized, storage_buffer_read_only_sized, uniform_buffer_sized},
         *,
     },
     renderer::{RenderContext, RenderDevice, RenderQueue},
@@ -29,6 +29,39 @@ use std::num::NonZeroU64;
 
 const SHADER_PATH: &str = "shaders/atom_interpolate.wgsl";
 const WORKGROUP_SIZE: u32 = 256;
+const GPU_POSITION_STRIDE: usize = 16;
+
+/// WGSL storage buffers align vec3/vec4 array elements to 16 bytes.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct GpuPosition {
+    x: f32,
+    y: f32,
+    z: f32,
+    _pad: f32,
+}
+
+impl From<Vec3> for GpuPosition {
+    fn from(v: Vec3) -> Self {
+        Self {
+            x: v.x,
+            y: v.y,
+            z: v.z,
+            _pad: 0.0,
+        }
+    }
+}
+
+fn vec3_slice_to_gpu(positions: &[Vec3]) -> Vec<GpuPosition> {
+    positions.iter().copied().map(GpuPosition::from).collect()
+}
+
+fn gpu_slice_to_vec3(positions: &[GpuPosition]) -> Vec<Vec3> {
+    positions
+        .iter()
+        .map(|p| Vec3::new(p.x, p.y, p.z))
+        .collect()
+}
 
 /// Maps dense position array indices to instanced atom locations.
 #[derive(Resource, Default, Clone, Debug)]
@@ -219,10 +252,10 @@ pub fn apply_gpu_interpolated_positions(
 pub fn clear_dense_layout_on_load(
     mut layout: ResMut<DenseAtomLayout>,
     mut extract: ResMut<GpuInterpolationExtract>,
-    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
-    topology_events: EventReader<crate::systems::loading::TopologyAppliedEvent>,
+    mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    mut topology_events: EventReader<crate::systems::loading::TopologyAppliedEvent>,
 ) {
-    if file_loaded_events.is_empty() && topology_events.is_empty() {
+    if file_loaded_events.read().next().is_none() && topology_events.read().next().is_none() {
         return;
     }
     layout.clear();
@@ -301,9 +334,9 @@ impl FromWorld for InterpolationPipeline {
             &BindGroupLayoutEntries::sequential(
                 ShaderStages::COMPUTE,
                 (
-                    storage_buffer::<Vec3>(true),
-                    storage_buffer::<Vec3>(true),
-                    storage_buffer::<Vec3>(false),
+                    storage_buffer_read_only_sized(false, NonZeroU64::new(GPU_POSITION_STRIDE as u64)),
+                    storage_buffer_read_only_sized(false, NonZeroU64::new(GPU_POSITION_STRIDE as u64)),
+                    storage_buffer_sized(false, NonZeroU64::new(GPU_POSITION_STRIDE as u64)),
                     uniform_buffer_sized(false, NonZeroU64::new(16)),
                 ),
             ),
@@ -360,7 +393,7 @@ fn prepare_interpolation_buffers(
     }
 
     let num_atoms = extract.num_atoms as usize;
-    let byte_len = (num_atoms * std::mem::size_of::<Vec3>()) as u64;
+    let byte_len = (num_atoms * GPU_POSITION_STRIDE) as u64;
 
     if buffers.capacity_atoms < num_atoms {
         let usage = BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST;
@@ -408,8 +441,16 @@ fn prepare_interpolation_buffers(
         return;
     };
 
-    render_queue.write_buffer(positions_a, 0, bytemuck::cast_slice(&extract.positions_a));
-    render_queue.write_buffer(positions_b, 0, bytemuck::cast_slice(&extract.positions_b));
+    render_queue.write_buffer(
+        positions_a,
+        0,
+        bytemuck::cast_slice(&vec3_slice_to_gpu(&extract.positions_a)),
+    );
+    render_queue.write_buffer(
+        positions_b,
+        0,
+        bytemuck::cast_slice(&vec3_slice_to_gpu(&extract.positions_b)),
+    );
 
     let uniform_data = InterpolationUniformsGpu {
         alpha: extract.alpha,
@@ -507,7 +548,7 @@ impl render_graph::Node for GpuInterpolationNode {
             pass.dispatch_workgroups(workgroups, 1, 1);
         }
 
-        let byte_len = (extract.num_atoms as usize * std::mem::size_of::<Vec3>()) as u64;
+        let byte_len = (extract.num_atoms as usize * GPU_POSITION_STRIDE) as u64;
         render_context.command_encoder().copy_buffer_to_buffer(
             positions_out,
             0,
@@ -535,7 +576,7 @@ fn map_interpolation_readback(
         return;
     };
 
-    let byte_len = extract.num_atoms as usize * std::mem::size_of::<Vec3>();
+    let byte_len = extract.num_atoms as usize * GPU_POSITION_STRIDE;
     let buffer_slice = readback.slice(..byte_len as u64);
     let (signal_tx, signal_rx) = crossbeam_channel::unbounded::<()>();
 
@@ -554,7 +595,8 @@ fn map_interpolation_readback(
 
     let data = {
         let view = buffer_slice.get_mapped_range();
-        bytemuck::cast_slice::<u8, Vec3>(&view).to_vec()
+        let gpu_positions = bytemuck::cast_slice::<u8, GpuPosition>(&view).to_vec();
+        gpu_slice_to_vec3(&gpu_positions)
     };
     readback.unmap();
 

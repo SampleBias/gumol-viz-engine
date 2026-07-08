@@ -242,19 +242,21 @@ pub fn sync_selection_markers(
 pub fn clear_selection_on_load(
     mut commands: Commands,
     mut selection: ResMut<SelectionState>,
-    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
     mut cleared_event: EventWriter<SelectionClearedEvent>,
 ) {
-    if !file_loaded_events.is_empty() && !selection.is_empty() {
-        // Deselect all atoms
-        for selected_entity in selection.entities().to_vec() {
-            commands.entity(selected_entity).remove::<Selected>();
-        }
-
-        selection.clear();
-        cleared_event.send(SelectionClearedEvent);
-        info!("Selection cleared on file load");
+    if file_loaded_events.read().next().is_none() || selection.is_empty() {
+        return;
     }
+
+    // Deselect all atoms
+    for selected_entity in selection.entities().to_vec() {
+        commands.entity(selected_entity).remove::<Selected>();
+    }
+
+    selection.clear();
+    cleared_event.send(SelectionClearedEvent);
+    info!("Selection cleared on file load");
 }
 
 /// Register all selection systems

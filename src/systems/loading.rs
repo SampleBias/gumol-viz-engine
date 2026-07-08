@@ -705,9 +705,9 @@ pub fn load_default_file(_commands: Commands, mut load_events: EventWriter<LoadF
     info!("No default file found, starting empty");
 }
 
-/// Print simulation data statistics
+/// Print simulation data statistics when load state changes.
 pub fn print_simulation_data(sim_data: Res<SimulationData>) {
-    if sim_data.loaded {
+    if sim_data.is_changed() && sim_data.loaded {
         info!(
             "Simulation data: {} atoms, {} frames, {:.2} fs",
             sim_data.num_atoms(),

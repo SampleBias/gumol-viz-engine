@@ -297,26 +297,29 @@ pub fn clear_instanced_atoms_on_load(
     mut atom_index: ResMut<InstancedAtomIndex>,
     mut mesh_pool: ResMut<AtomMeshPool>,
     mut pick_entities: ResMut<crate::interaction::pick_proxy::PickProxyEntities>,
-    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
-    topology_events: EventReader<crate::systems::loading::TopologyAppliedEvent>,
+    mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    mut topology_events: EventReader<crate::systems::loading::TopologyAppliedEvent>,
 ) {
-    let reload = !file_loaded_events.is_empty() || !topology_events.is_empty();
-    if reload {
-        mesh_pool.clear();
-        if !pick_entities.entities.is_empty() {
-            for (_, entity) in pick_entities.entities.drain() {
-                commands.entity(entity).despawn_recursive();
-            }
-        }
+    let reload = file_loaded_events.read().next().is_some()
+        || topology_events.read().next().is_some();
+    if !reload {
+        return;
+    }
 
-        if !instanced_entities.entities.is_empty() {
-            for (_, entity) in instanced_entities.entities.drain() {
-                commands.entity(entity).despawn_recursive();
-            }
-            instanced_entities.total_atoms = 0;
-            atom_index.clear();
-            info!("Cleared instanced atoms for new file load");
+    mesh_pool.clear();
+    if !pick_entities.entities.is_empty() {
+        for (_, entity) in pick_entities.entities.drain() {
+            commands.entity(entity).despawn_recursive();
         }
+    }
+
+    if !instanced_entities.entities.is_empty() {
+        for (_, entity) in instanced_entities.entities.drain() {
+            commands.entity(entity).despawn_recursive();
+        }
+        instanced_entities.total_atoms = 0;
+        atom_index.clear();
+        info!("Cleared instanced atoms for new file load");
     }
 }
 

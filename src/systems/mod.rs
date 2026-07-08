@@ -94,7 +94,7 @@ pub fn register(app: &mut App) {
                 crate::rendering::culling::cull_instanced_atoms,
                 crate::rendering::lod_system::update_instanced_lod_meshes,
             ),
-            // Group 7: visualization & selection
+            // Group 7: visualization & selection (after UI so mode dropdown changes apply same frame)
             (
                 visualization::clamp_unavailable_render_modes,
                 visualization::sync_mode_params,
@@ -107,7 +107,8 @@ pub fn register(app: &mut App) {
                 crate::rendering::ribbon::update_ribbon_visibility,
                 crate::rendering::ribbon::update_ribbon_for_mode,
                 crate::rendering::surface::update_surface_visibility,
-            ),
+            )
+                .after(crate::ui::main_ui_panel),
         )
             .chain(),
     );

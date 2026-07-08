@@ -283,10 +283,10 @@ pub fn prefetch_during_playback(
 pub fn clear_frame_cache_on_load(
     mut cache: ResMut<FrameCache>,
     mut frames: ResMut<TimelineFrames>,
-    file_loaded_events: EventReader<FileLoadedEvent>,
-    topology_events: EventReader<crate::systems::loading::TopologyAppliedEvent>,
+    mut file_loaded_events: EventReader<FileLoadedEvent>,
+    mut topology_events: EventReader<crate::systems::loading::TopologyAppliedEvent>,
 ) {
-    if file_loaded_events.is_empty() && topology_events.is_empty() {
+    if file_loaded_events.read().next().is_none() && topology_events.read().next().is_none() {
         return;
     }
 

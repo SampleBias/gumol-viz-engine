@@ -688,7 +688,7 @@ pub fn main_ui_panel(
 
             // Visualization mode selector
             ui.label("Mode:");
-            bevy_egui::egui::ComboBox::from_label("")
+            bevy_egui::egui::ComboBox::from_id_source("viz_render_mode")
                 .selected_text(viz_ui.viz_config.render_mode.name())
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
@@ -752,7 +752,7 @@ pub fn main_ui_panel(
             ui.separator();
 
             ui.label("Color scheme:");
-            bevy_egui::egui::ComboBox::from_label("")
+            bevy_egui::egui::ComboBox::from_id_source("viz_color_scheme")
                 .selected_text(viz_ui.viz_config.color_scheme.name())
                 .show_ui(ui, |ui| {
                     for scheme in ColorScheme::UI_SCHEMES {

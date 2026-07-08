@@ -184,9 +184,9 @@ fn empty_mesh() -> Mesh {
 pub fn clear_surface_on_load(
     mut commands: Commands,
     mut surface_entities: ResMut<SurfaceEntities>,
-    file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
+    mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
 ) {
-    if file_loaded_events.is_empty() {
+    if file_loaded_events.read().next().is_none() {
         return;
     }
     if let Some(entity) = surface_entities.entity.take() {
@@ -203,9 +203,9 @@ pub fn spawn_surface_on_load(
     index: Res<InstancedAtomIndex>,
     instanced: Query<(&InstancedAtomEntity, &InstancedAtomMesh)>,
     mut surface_entities: ResMut<SurfaceEntities>,
-    spawned_events: EventReader<InstancedAtomsSpawnedEvent>,
+    mut spawned_events: EventReader<InstancedAtomsSpawnedEvent>,
 ) {
-    if spawned_events.is_empty() || surface_entities.entity.is_some() {
+    if spawned_events.read().next().is_none() || surface_entities.entity.is_some() {
         return;
     }
     if !sim_data.loaded || sim_data.atom_data.is_empty() {
