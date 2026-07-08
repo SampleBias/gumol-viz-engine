@@ -90,7 +90,40 @@ Run: `cargo run --release -- tests/fixtures/1CRN.pdb`
 
 ## Known gaps after Sprint 1
 
-- Interactive 60 FPS at 100K with full scene (bonds + UI + GPU) not formally profiled
+- Interactive 60 FPS at 100K with full scene (bonds + UI + GPU) not formally profiled in-app (Sprint 5 adds CPU budget estimate test)
 - Screenshot path not covered by automated test (requires window/GPU)
 - `dev_dynamic` profile not manually verified
 - 1CRN PDB CONECT records are sparse; ball-and-stick on proteins relies on distance detection when CONECT absent
+
+---
+
+## Sprint 5 — Interaction + CPU budget (2026-07-08)
+
+| Area | Test / feature | Status |
+|------|----------------|--------|
+| Box selection | Middle-mouse drag + Shift additive | ✅ |
+| Atom labels | egui overlay on selected atoms (toggle in UI) | ✅ |
+| Select all | Ctrl+A (warns above 10K atoms) | ✅ |
+| Combined 100K CPU estimate | `tests/sprint5_validation.rs` | ✅ |
+| POV-Ray export smoke | `test_povray_roundtrip_export` | ✅ |
+
+Run Sprint 5 tests:
+
+```bash
+cargo test --test sprint5_validation
+cargo test --lib box_selection
+```
+
+### 100K combined CPU estimate
+
+Measured release benchmarks (Sprint 1) plus conservative per-frame estimates:
+
+| Component @ 100K | Mean (ms) |
+|------------------|-----------|
+| Dense position sync | 3.922 |
+| Draw-call / instance count pass | 2.009 |
+| Color scheme update (est.) | 1.0 |
+| Bond position update (est.) | 0.5 |
+| **Total CPU estimate** | **~7.4 ms** |
+
+At ~7.4 ms, core CPU systems use ~44% of a 16.67 ms (60 FPS) frame, leaving headroom for GPU rendering and UI. Full interactive proof still requires in-app profiling (`docs/PROFILING.md`).

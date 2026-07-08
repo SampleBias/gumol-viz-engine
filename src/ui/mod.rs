@@ -1,5 +1,6 @@
 //! User interface systems (EGUI)
 
+pub mod atom_labels;
 pub mod help;
 pub mod inspector;
 pub mod notifications;
@@ -300,6 +301,13 @@ pub struct TopologyUiState<'w> {
     pub topology_picker: ResMut<'w, TopologyPickerState>,
 }
 
+#[derive(SystemParam)]
+pub struct SelectionPanelState<'w> {
+    pub selection: ResMut<'w, SelectionState>,
+    pub measurements: Res<'w, MeasurementState>,
+    pub labels: ResMut<'w, atom_labels::AtomLabelSettings>,
+}
+
 /// Main UI panel: status, Open button, controls, error display
 #[allow(clippy::too_many_arguments)]
 pub fn main_ui_panel(
@@ -315,8 +323,7 @@ pub fn main_ui_panel(
     mut load_errors: EventReader<FileLoadErrorEvent>,
     mut timeline: ResMut<TimelineState>,
     timeline_frames: Res<crate::systems::frame_cache::TimelineFrames>,
-    mut selection: ResMut<SelectionState>,
-    measurements: Res<MeasurementState>,
+    mut selection_ui: SelectionPanelState,
     mut commands: Commands,
     mut viz_ui: VisualizationUiState,
 ) {
@@ -621,8 +628,8 @@ pub fn main_ui_panel(
             ui.heading("Selection");
             ui.separator();
 
-            ui.label(format!("Selected atoms: {}", selection.len()));
-            if selection.len() < 2 {
+            ui.label(format!("Selected atoms: {}", selection_ui.selection.len()));
+            if selection_ui.selection.len() < 2 {
                 ui.label(
                     bevy_egui::egui::RichText::new("Shift+Click to add atoms for measurements")
                         .small(),
@@ -630,24 +637,24 @@ pub fn main_ui_panel(
             }
 
             // Measurement display
-            if selection.len() >= 2 {
-                if let Some(d) = measurements.distance {
+            if selection_ui.selection.len() >= 2 {
+                if let Some(d) = selection_ui.measurements.distance {
                     ui.label(
                         bevy_egui::egui::RichText::new(format!("Distance: {:.3} Å", d))
                             .color(bevy_egui::egui::Color32::from_rgb(100, 200, 100)),
                     );
                 }
             }
-            if selection.len() >= 3 {
-                if let Some(a) = measurements.angle {
+            if selection_ui.selection.len() >= 3 {
+                if let Some(a) = selection_ui.measurements.angle {
                     ui.label(
                         bevy_egui::egui::RichText::new(format!("Angle: {:.2}°", a))
                             .color(bevy_egui::egui::Color32::from_rgb(100, 200, 100)),
                     );
                 }
             }
-            if selection.len() >= 4 {
-                if let Some(d) = measurements.dihedral {
+            if selection_ui.selection.len() >= 4 {
+                if let Some(d) = selection_ui.measurements.dihedral {
                     ui.label(
                         bevy_egui::egui::RichText::new(format!("Dihedral: {:.2}°", d))
                             .color(bevy_egui::egui::Color32::from_rgb(100, 200, 100)),
@@ -655,15 +662,20 @@ pub fn main_ui_panel(
                 }
             }
 
+            ui.checkbox(
+                &mut selection_ui.labels.show_selected,
+                "Show labels on selected atoms",
+            );
+
             // Clear selection button
-            if !selection.is_empty() {
+            if !selection_ui.selection.is_empty() {
                 if ui.button("Clear selection").clicked() {
-                    for selected_entity in selection.entities().to_vec() {
+                    for selected_entity in selection_ui.selection.entities().to_vec() {
                         commands
                             .entity(selected_entity)
                             .remove::<crate::interaction::selection::Selected>();
                     }
-                    selection.clear();
+                    selection_ui.selection.clear();
                     commands.trigger(crate::interaction::selection::SelectionClearedEvent);
                 }
             } else {
@@ -987,6 +999,8 @@ pub fn main_ui_panel(
             ui.label("  Drag file — Load molecular file");
             ui.label("  Click atom — Select atom");
             ui.label("  Shift+Click — Toggle selection");
+            ui.label("  Middle drag — Box select (Shift adds)");
+            ui.label("  Ctrl+A — Select all");
             ui.label("  Escape — Clear selection");
             if total_frames > 1 {
                 ui.separator();
@@ -1023,6 +1037,7 @@ pub fn render_mode_shortcuts(
 pub fn register(app: &mut App) {
     help::register(app);
     notifications::register(app);
+    atom_labels::register(app);
 
     app.init_resource::<FilePickerState>()
         .init_resource::<TopologyPickerState>()

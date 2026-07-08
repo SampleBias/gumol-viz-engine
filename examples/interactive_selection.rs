@@ -18,6 +18,8 @@ fn main() {
     println!("=============================================");
     println!("Click — select atom");
     println!("Shift+Click — add/remove from selection");
+    println!("Middle drag — box select (Shift adds)");
+    println!("Ctrl+A — select all");
     println!("Escape — clear selection");
     println!("F — focus camera on molecule   Shift+F — focus on selection");
     println!();

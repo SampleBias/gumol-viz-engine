@@ -298,9 +298,9 @@ Read the [Development Plan](docs/DEVELOPMENT_PLAN.md) and [Architecture Guide](d
 - [x] Runtime color schemes (CPK, Residue, Chain, B-factor)
 - [x] Video export (FFmpeg; `cargo run` — requires `ffmpeg` on PATH)
 - [x] POV-Ray export
-- [ ] Box selection and atom labels
+- [x] Box selection and atom labels
 - [x] `timeline_demo` and `interactive_selection` examples
-- [ ] 100K-atom performance validation
+- [ ] 100K-atom performance validation (CPU estimate done; interactive GPU profiling pending)
 - [ ] Fix headless plugin registration test
 
 ### Version 0.3.0 — Scale & I/O

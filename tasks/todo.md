@@ -115,13 +115,13 @@ The engine has a working instanced-rendering pipeline, full primary/secondary fi
 - [x] Prove 100K-atom position-sync @ 60 FPS budget (criterion ~3.9 ms; see `docs/VALIDATION.md`)
 - [x] Validate GPU interpolation CPU reference parity (unit + integration tests)
 - [x] Enforce benchmark regression gate in CI (script exists; `bench-regression` job on PR/push)
-- [ ] Full interactive 100K @ 60 FPS with bonds + UI (profiling pass pending)
+- [ ] Full interactive 100K @ 60 FPS with bonds + UI (CPU estimate in Sprint 5; GPU profiling pending)
 - [ ] Parallel trajectory parsing with `rayon` (dependency present; not wired)
 
 ### Priority: MEDIUM — Interaction & Camera
 
-- [ ] Box / drag selection (`selection.rs` notes "not yet implemented")
-- [ ] Atom / residue text labels (3D or egui overlay)
+- [x] Box / drag selection — middle-mouse rubber band (`interaction/box_selection.rs`)
+- [x] Atom / residue text labels — egui overlay on selected atoms (`ui/atom_labels.rs`)
 - [ ] Fly-through camera mode (only orbit implemented)
 - [ ] Selection manipulation (rotate/translate groups)
 - [ ] Octree or spatial index for picking at very large scale
@@ -185,6 +185,12 @@ See interactive checklist in `docs/VALIDATION.md`.
 - [x] Benchmark suite and baseline
 - [ ] Puffin/Tracy profiling integration (Bevy `trace` feature available; puffin not added)
 - [ ] Parallel file parsing with rayon
+
+### 2026-07-08 — Sprint 5 (interaction + CPU budget)
+- [x] Box selection (middle-mouse drag, Shift additive)
+- [x] Atom labels overlay + UI toggle
+- [x] Ctrl+A select all
+- [x] Combined 100K CPU budget estimate test (`tests/sprint5_validation.rs`)
 
 ### 2026-07-07 — Sprint 4 (v0.2 export + examples)
 - [x] POV-Ray export (`export/povray.rs`) + UI button

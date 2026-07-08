@@ -31,14 +31,14 @@ impl SelectionState {
         self.selected_entities.contains(&entity)
     }
 
-    /// Get number of selected entities
+    /// Get number of selected atoms
     pub fn len(&self) -> usize {
-        self.selected_entities.len()
+        self.selected_atom_ids.len()
     }
 
     /// Check if selection is empty
     pub fn is_empty(&self) -> bool {
-        self.selected_entities.is_empty()
+        self.selected_atom_ids.is_empty()
     }
 
     /// Clear all selections
@@ -236,23 +236,6 @@ pub fn sync_selection_markers(
             commands.entity(entity).remove::<Selected>();
         }
     }
-}
-
-/// Selection box visualization (for box selection mode)
-#[derive(Component)]
-pub struct SelectionBox;
-
-/// Draw selection box when in box selection mode
-pub fn draw_selection_box(
-    _commands: Commands,
-    _selection: Res<SelectionState>,
-    _mouse: Res<ButtonInput<MouseButton>>,
-    _keyboard: Res<ButtonInput<KeyCode>>,
-    _windows: Query<&Window>,
-    _camera_q: Query<(&Camera, &GlobalTransform)>,
-) {
-    // Box selection is not yet implemented
-    // This would require mouse drag detection and raycasting to a plane
 }
 
 /// Clear selection when a new file is loaded
