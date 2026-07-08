@@ -42,10 +42,7 @@ pub struct RequestExportPovRayEvent {
 }
 
 /// Build camera snapshot from the primary 3D camera and orbit controller.
-pub fn capture_camera(
-    camera_transform: &Transform,
-    pan_orbit: &PanOrbitCamera,
-) -> CameraSnapshot {
+pub fn capture_camera(camera_transform: &Transform, pan_orbit: &PanOrbitCamera) -> CameraSnapshot {
     CameraSnapshot {
         location: camera_transform.translation,
         look_at: pan_orbit.focus,
@@ -104,12 +101,20 @@ fn write_pov(path: &PathBuf, data: &SceneSnapshot, camera: &CameraSnapshot) -> s
     writeln!(w, "}}")?;
     writeln!(w)?;
     writeln!(w, "light_source {{")?;
-    writeln!(w, "  {}", vec3_pov(camera.location + Vec3::new(10.0, 15.0, 8.0)))?;
+    writeln!(
+        w,
+        "  {}",
+        vec3_pov(camera.location + Vec3::new(10.0, 15.0, 8.0))
+    )?;
     writeln!(w, "  color rgb<1, 1, 1>")?;
     writeln!(w, "}}")?;
     writeln!(w)?;
     writeln!(w, "light_source {{")?;
-    writeln!(w, "  {}", vec3_pov(camera.look_at + Vec3::new(-8.0, 6.0, -10.0)))?;
+    writeln!(
+        w,
+        "  {}",
+        vec3_pov(camera.look_at + Vec3::new(-8.0, 6.0, -10.0))
+    )?;
     writeln!(w, "  color rgb<0.4, 0.4, 0.5>")?;
     writeln!(w, "}}")?;
     writeln!(w)?;

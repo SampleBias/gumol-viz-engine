@@ -3,8 +3,8 @@
 pub mod gltf_export;
 pub mod mesh_export;
 pub mod obj;
-pub mod scene_snapshot;
 pub mod povray;
+pub mod scene_snapshot;
 pub mod screenshot;
 pub mod video;
 

@@ -51,24 +51,16 @@ pub fn atom_label_overlay(
             continue;
         };
 
-        let Some(screen) = crate::interaction::box_selection::world_to_window(
-            camera,
-            camera_transform,
-            world,
-        ) else {
+        let Some(screen) =
+            crate::interaction::box_selection::world_to_window(camera, camera_transform, world)
+        else {
             continue;
         };
 
         let label = atom_query
             .iter()
             .find(|(p, _)| p.atom_id == atom_id)
-            .map(|(_, atom)| {
-                format!(
-                    "{} {}",
-                    atom.element.symbol(),
-                    atom.name.trim()
-                )
-            })
+            .map(|(_, atom)| format!("{} {}", atom.element.symbol(), atom.name.trim()))
             .unwrap_or_else(|| format!("#{atom_id}"));
 
         let pos = bevy_egui::egui::pos2(screen.x + 8.0, screen.y - 8.0);

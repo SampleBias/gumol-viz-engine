@@ -179,11 +179,12 @@ fn spawn_bond_visual(
     let rotation = compute_bond_rotation(bond_vector, bond_length);
     let spacing = 0.16 * base_radius.max(0.05) / 0.1;
     let offsets = bond_cylinder_local_offsets(bond_data.order, spacing);
-    let radius = base_radius * if bond_data.order == BondOrder::Single {
-        1.0
-    } else {
-        0.82
-    };
+    let radius = base_radius
+        * if bond_data.order == BondOrder::Single {
+            1.0
+        } else {
+            0.82
+        };
     let bond_mesh = meshes.add(rendering::generate_bond_mesh(bond_length, radius));
 
     let parent = commands

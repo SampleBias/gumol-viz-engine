@@ -15,7 +15,9 @@ use bevy::render::{
     extract_resource::{ExtractResource, ExtractResourcePlugin},
     render_graph::{self, RenderGraph, RenderLabel},
     render_resource::{
-        binding_types::{storage_buffer_sized, storage_buffer_read_only_sized, uniform_buffer_sized},
+        binding_types::{
+            storage_buffer_read_only_sized, storage_buffer_sized, uniform_buffer_sized,
+        },
         *,
     },
     renderer::{RenderContext, RenderDevice, RenderQueue},
@@ -57,10 +59,7 @@ fn vec3_slice_to_gpu(positions: &[Vec3]) -> Vec<GpuPosition> {
 }
 
 fn gpu_slice_to_vec3(positions: &[GpuPosition]) -> Vec<Vec3> {
-    positions
-        .iter()
-        .map(|p| Vec3::new(p.x, p.y, p.z))
-        .collect()
+    positions.iter().map(|p| Vec3::new(p.x, p.y, p.z)).collect()
 }
 
 /// Maps dense position array indices to instanced atom locations.
@@ -334,8 +333,14 @@ impl FromWorld for InterpolationPipeline {
             &BindGroupLayoutEntries::sequential(
                 ShaderStages::COMPUTE,
                 (
-                    storage_buffer_read_only_sized(false, NonZeroU64::new(GPU_POSITION_STRIDE as u64)),
-                    storage_buffer_read_only_sized(false, NonZeroU64::new(GPU_POSITION_STRIDE as u64)),
+                    storage_buffer_read_only_sized(
+                        false,
+                        NonZeroU64::new(GPU_POSITION_STRIDE as u64),
+                    ),
+                    storage_buffer_read_only_sized(
+                        false,
+                        NonZeroU64::new(GPU_POSITION_STRIDE as u64),
+                    ),
                     storage_buffer_sized(false, NonZeroU64::new(GPU_POSITION_STRIDE as u64)),
                     uniform_buffer_sized(false, NonZeroU64::new(16)),
                 ),

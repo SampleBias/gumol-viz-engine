@@ -4,8 +4,8 @@ use gumol_viz_engine::performance::{
     ProfilingReport, FRAME_BUDGET_MS, PLAYBACK_TARGET_FPS, TARGET_FPS,
 };
 use gumol_viz_engine::utils::synthetic::{
-    ensure_100k_fixtures, synthetic_atom_data, synthetic_trajectory,
-    SYNTHETIC_100K_PLAYBACK_XYZ, SYNTHETIC_100K_XYZ,
+    ensure_100k_fixtures, synthetic_atom_data, synthetic_trajectory, SYNTHETIC_100K_PLAYBACK_XYZ,
+    SYNTHETIC_100K_XYZ,
 };
 
 #[test]
@@ -47,16 +47,7 @@ fn test_100k_fixture_constants() {
 #[test]
 fn test_profiling_report_static_pass_threshold() {
     let samples = vec![FRAME_BUDGET_MS * 0.9; 300];
-    let report = ProfilingReport::evaluate(
-        100_000,
-        1,
-        3,
-        false,
-        120,
-        300,
-        &samples,
-        TARGET_FPS,
-    );
+    let report = ProfilingReport::evaluate(100_000, 1, 3, false, 120, 300, &samples, TARGET_FPS);
     assert!(report.passed, "expected pass at ~{TARGET_FPS} FPS target");
 }
 
@@ -74,15 +65,15 @@ fn test_profiling_report_playback_pass_threshold() {
         &samples,
         PLAYBACK_TARGET_FPS,
     );
-    assert!(report.passed, "expected pass at ~{PLAYBACK_TARGET_FPS} FPS playback target");
+    assert!(
+        report.passed,
+        "expected pass at ~{PLAYBACK_TARGET_FPS} FPS playback target"
+    );
 }
 
 #[test]
 fn test_ensure_100k_fixtures_writes_both_paths_in_cwd() {
-    let dir = std::env::temp_dir().join(format!(
-        "gumol_sprint7_ensure_{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("gumol_sprint7_ensure_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("tests/fixtures")).expect("mkdir fixtures");
 

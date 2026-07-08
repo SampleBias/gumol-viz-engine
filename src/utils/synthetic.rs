@@ -72,11 +72,7 @@ pub fn write_synthetic_xyz(path: &Path, atom_count: usize, frame_count: usize) -
         for atom in 0..atom_count {
             let element = element_for_index(atom).symbol();
             let pos = position_for_atom(atom, frame);
-            writeln!(
-                file,
-                "{element} {:.6} {:.6} {:.6}",
-                pos.x, pos.y, pos.z
-            )?;
+            writeln!(file, "{element} {:.6} {:.6} {:.6}", pos.x, pos.y, pos.z)?;
         }
     }
     Ok(())

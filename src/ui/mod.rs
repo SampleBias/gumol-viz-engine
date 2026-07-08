@@ -908,8 +908,8 @@ pub fn main_ui_panel(
             let gltf_pending = export_panel.saves.gltf.receiver.is_some();
             let povray_pending = export_panel.saves.povray.receiver.is_some();
             let video_dialog_pending = export_panel.saves.video.receiver.is_some();
-            let video_recording = export_panel.video.status
-                != crate::export::video::VideoExportStatus::Idle;
+            let video_recording =
+                export_panel.video.status != crate::export::video::VideoExportStatus::Idle;
             let any_export_pending = screenshot_pending
                 || obj_pending
                 || gltf_pending
@@ -1030,9 +1030,7 @@ pub fn main_ui_panel(
                             .show_percentage(),
                     );
                 } else {
-                    ui.label(
-                        bevy_egui::egui::RichText::new("Encoding…").italics(),
-                    );
+                    ui.label(bevy_egui::egui::RichText::new("Encoding…").italics());
                 }
             }
 

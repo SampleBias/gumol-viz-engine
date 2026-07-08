@@ -741,7 +741,10 @@ pub fn load_cli_file(
         } else {
             PathBuf::from(crate::utils::synthetic::SYNTHETIC_100K_XYZ)
         };
-        info!("Loading generated 100K profiling fixture: {}", path.display());
+        info!(
+            "Loading generated 100K profiling fixture: {}",
+            path.display()
+        );
         load_events.send(LoadFileEvent { path });
         return;
     }
@@ -1019,10 +1022,8 @@ mod tests {
 
     #[test]
     fn test_profile_playback_flag() {
-        let parsed = parse_cli_args_from_iter([
-            "gumol".to_string(),
-            "--profile-playback".to_string(),
-        ]);
+        let parsed =
+            parse_cli_args_from_iter(["gumol".to_string(), "--profile-playback".to_string()]);
         assert!(parsed.profile.enabled);
         assert!(parsed.profile.playback);
     }

@@ -2,7 +2,9 @@
 
 use gumol_viz_engine::core::bond::BondOrder;
 use gumol_viz_engine::io::xyz::XYZParser;
-use gumol_viz_engine::io::xyz_parallel::{parse_file_optimized, parse_lines_parallel, PARALLEL_FRAME_THRESHOLD};
+use gumol_viz_engine::io::xyz_parallel::{
+    parse_file_optimized, parse_lines_parallel, PARALLEL_FRAME_THRESHOLD,
+};
 use gumol_viz_engine::systems::bonds::{bond_cylinder_count, bond_cylinder_local_offsets};
 use std::path::PathBuf;
 

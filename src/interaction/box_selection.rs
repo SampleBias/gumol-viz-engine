@@ -172,13 +172,7 @@ pub fn handle_box_selection(
             return;
         };
 
-        let hit_ids = atoms_in_screen_rect(
-            rect,
-            &index,
-            &instanced,
-            camera,
-            camera_transform,
-        );
+        let hit_ids = atoms_in_screen_rect(rect, &index, &instanced, camera, camera_transform);
 
         if hit_ids.is_empty() {
             return;

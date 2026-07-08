@@ -126,10 +126,7 @@ impl ProfilingReport {
         } else {
             sample_times_ms.iter().sum::<f32>() / sample_times_ms.len() as f32
         };
-        let max_frame_ms = sample_times_ms
-            .iter()
-            .copied()
-            .fold(0.0_f32, f32::max);
+        let max_frame_ms = sample_times_ms.iter().copied().fold(0.0_f32, f32::max);
         let min_fps = if max_frame_ms > 0.0 {
             1000.0 / max_frame_ms
         } else {
@@ -270,7 +267,10 @@ pub fn run_profiling_validation(
                 log_profiling_report(&report);
                 if let Some(ref path) = session.output_path {
                     if let Err(err) = write_report_json(path, &report) {
-                        warn!("Failed to write profiling report to {}: {err}", path.display());
+                        warn!(
+                            "Failed to write profiling report to {}: {err}",
+                            path.display()
+                        );
                     }
                 }
                 diagnostics.profiling_report = Some(report.clone());
@@ -327,16 +327,8 @@ mod tests {
     #[test]
     fn profiling_report_passes_at_60fps() {
         let samples = vec![16.0; 300];
-        let report = ProfilingReport::evaluate(
-            100_000,
-            1,
-            3,
-            false,
-            120,
-            300,
-            &samples,
-            TARGET_FPS,
-        );
+        let report =
+            ProfilingReport::evaluate(100_000, 1, 3, false, 120, 300, &samples, TARGET_FPS);
         assert!(report.passed);
         assert!((report.avg_fps - 62.5).abs() < 1.0);
     }

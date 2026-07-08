@@ -23,12 +23,10 @@ struct FrameSpec {
 
 /// Parse XYZ via memory map (avoids an extra kernel read buffer copy for large files).
 pub fn parse_file_mmap(path: &Path) -> IOResult<Trajectory> {
-    let file =
-        File::open(path).map_err(|_| IOError::FileNotFound(path.display().to_string()))?;
+    let file = File::open(path).map_err(|_| IOError::FileNotFound(path.display().to_string()))?;
     let mmap = unsafe { Mmap::map(&file) }.map_err(IOError::Io)?;
-    let content = std::str::from_utf8(&mmap).map_err(|_| {
-        IOError::InvalidFormat(format!("{} is not valid UTF-8", path.display()))
-    })?;
+    let content = std::str::from_utf8(&mmap)
+        .map_err(|_| IOError::InvalidFormat(format!("{} is not valid UTF-8", path.display())))?;
     let lines: Vec<String> = content.lines().map(str::to_string).collect();
     parse_lines_parallel(&lines, path.to_path_buf())
 }
@@ -49,10 +47,13 @@ fn scan_frame_specs(lines: &[String]) -> IOResult<(usize, f32, Vec<FrameSpec>)> 
         }
 
         let natoms_line = i;
-        let count = lines[i].trim().parse::<usize>().map_err(|_| IOError::ParseError {
-            line: i,
-            message: format!("Expected atom count, got {}", lines[i]),
-        })?;
+        let count = lines[i]
+            .trim()
+            .parse::<usize>()
+            .map_err(|_| IOError::ParseError {
+                line: i,
+                message: format!("Expected atom count, got {}", lines[i]),
+            })?;
 
         if frame_index == 0 {
             num_atoms = count;

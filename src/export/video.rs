@@ -194,7 +194,10 @@ fn temp_frames_dir() -> PathBuf {
 
 fn cleanup_temp_dir(path: &Path) {
     if let Err(err) = std::fs::remove_dir_all(path) {
-        warn!("Failed to remove temp video frames at {}: {err}", path.display());
+        warn!(
+            "Failed to remove temp video frames at {}: {err}",
+            path.display()
+        );
     }
 }
 
@@ -301,9 +304,7 @@ pub fn handle_video_export_requests(
 
         let frame_count = end_frame.saturating_sub(start_frame) + 1;
         if frame_count > 1000 {
-            warn!(
-                "Video export spans {frame_count} frames; capture may take a while"
-            );
+            warn!("Video export spans {frame_count} frames; capture may take a while");
         }
 
         state.status = VideoExportStatus::Capturing;
@@ -332,7 +333,9 @@ pub fn handle_video_export_requests(
 
         info!(
             "Video export started: frames {}..={} @ {} fps",
-            start_frame, end_frame, settings.fps.max(1)
+            start_frame,
+            end_frame,
+            settings.fps.max(1)
         );
     }
 }
@@ -361,13 +364,7 @@ pub fn video_export_step(
                 finish_session(&mut state, &mut timeline, &mut notifications, true, msg);
             }
             Ok(Err(err)) => {
-                finish_session(
-                    &mut state,
-                    &mut timeline,
-                    &mut notifications,
-                    false,
-                    err,
-                );
+                finish_session(&mut state, &mut timeline, &mut notifications, false, err);
             }
             Err(crossbeam_channel::TryRecvError::Empty) => {}
             Err(crossbeam_channel::TryRecvError::Disconnected) => {
@@ -405,8 +402,7 @@ pub fn video_export_step(
                 let frame_span = end_frame.saturating_sub(start_frame) + 1;
 
                 if done_frame >= end_frame {
-                    let encode_rx =
-                        start_encode_thread(output_path, temp_dir, fps, start_frame);
+                    let encode_rx = start_encode_thread(output_path, temp_dir, fps, start_frame);
                     state.status = VideoExportStatus::Encoding;
                     state.progress = -1.0;
                     state.message = Some("Encoding video with FFmpeg…".into());
@@ -421,13 +417,9 @@ pub fn video_export_step(
                         };
                     }
                     timeline.goto_frame(next);
-                    state.progress =
-                        (done_frame + 1 - start_frame) as f32 / frame_span as f32;
-                    state.message = Some(format!(
-                        "Recording frame {} / {}…",
-                        next + 1,
-                        end_frame + 1
-                    ));
+                    state.progress = (done_frame + 1 - start_frame) as f32 / frame_span as f32;
+                    state.message =
+                        Some(format!("Recording frame {} / {}…", next + 1, end_frame + 1));
                 }
             }
             Err(crossbeam_channel::TryRecvError::Empty) => {}
@@ -570,13 +562,8 @@ mod tests {
 
     #[test]
     fn test_build_ffmpeg_args_mp4() {
-        let args = build_ffmpeg_args(
-            Path::new("/out/movie.mp4"),
-            Path::new("/tmp/frames"),
-            30,
-            0,
-        )
-        .unwrap();
+        let args = build_ffmpeg_args(Path::new("/out/movie.mp4"), Path::new("/tmp/frames"), 30, 0)
+            .unwrap();
         assert!(args.iter().any(|a| a == "libx264"));
         assert!(args.iter().any(|a| a.contains("frame_%05d.png")));
         assert!(args.iter().any(|a| a == "0"));

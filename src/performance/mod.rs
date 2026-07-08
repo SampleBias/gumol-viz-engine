@@ -66,6 +66,9 @@ pub fn register(app: &mut App) {
     app.init_resource::<PerformanceSettings>()
         .init_resource::<PerformanceDiagnostics>()
         .init_resource::<FrameStats>()
-        .add_systems(Update, (fps::update_frame_stats, fps::run_profiling_validation));
+        .add_systems(
+            Update,
+            (fps::update_frame_stats, fps::run_profiling_validation),
+        );
     info!("Performance module registered");
 }

@@ -300,8 +300,8 @@ pub fn clear_instanced_atoms_on_load(
     mut file_loaded_events: EventReader<crate::systems::loading::FileLoadedEvent>,
     mut topology_events: EventReader<crate::systems::loading::TopologyAppliedEvent>,
 ) {
-    let reload = file_loaded_events.read().next().is_some()
-        || topology_events.read().next().is_some();
+    let reload =
+        file_loaded_events.read().next().is_some() || topology_events.read().next().is_some();
     if !reload {
         return;
     }

@@ -61,10 +61,7 @@ fn setup_scene(mut commands: Commands) {
     });
 }
 
-const TRAJECTORY_CANDIDATES: &[&str] = &[
-    "demo_trajectory.xyz",
-    "tests/fixtures/water.xyz",
-];
+const TRAJECTORY_CANDIDATES: &[&str] = &["demo_trajectory.xyz", "tests/fixtures/water.xyz"];
 
 fn load_trajectory(cli_arg: Res<CliFileArg>, mut load_events: EventWriter<LoadFileEvent>) {
     if cli_arg.0.is_some() {
