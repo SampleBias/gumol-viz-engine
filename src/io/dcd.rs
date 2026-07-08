@@ -168,7 +168,7 @@ impl DcdReader {
         let _ = reader.read_i32::<LittleEndian>()?;
         bytes_read += 4;
         let n_title = reader.read_i32::<LittleEndian>()?;
-        bytes_read += 8;
+        bytes_read += 4;
 
         if n_title > 0 {
             let title_rec_size = reader.read_i32::<LittleEndian>()?;
@@ -333,5 +333,66 @@ mod tests {
     #[test]
     fn test_frame_stride() {
         assert_eq!(DcdReader::frame_stride(100), (8 + 100 * 4) * 3);
+    }
+
+    #[test]
+    fn test_minimal_dcd_fixture_roundtrip() {
+        use byteorder::{LittleEndian, WriteBytesExt};
+        use std::io::Write;
+
+        let dir = std::env::temp_dir().join(format!("gumol_dcd_unit_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("mini.dcd");
+
+        {
+            let mut file = std::fs::File::create(&path).unwrap();
+            file.write_i32::<LittleEndian>(84).unwrap();
+            file.write_all(b"CORD").unwrap();
+            file.write_i32::<LittleEndian>(2).unwrap();
+            file.write_i32::<LittleEndian>(0).unwrap();
+            file.write_i32::<LittleEndian>(1).unwrap();
+            file.write_i32::<LittleEndian>(2).unwrap();
+            for _ in 0..5 {
+                file.write_i32::<LittleEndian>(0).unwrap();
+            }
+            file.write_i32::<LittleEndian>(0).unwrap();
+            file.write_f64::<LittleEndian>(0.02).unwrap();
+            for _ in 0..9 {
+                file.write_i32::<LittleEndian>(0).unwrap();
+            }
+            file.write_i32::<LittleEndian>(0).unwrap();
+            file.write_i32::<LittleEndian>(0).unwrap();
+            file.write_i32::<LittleEndian>(0).unwrap();
+            file.write_i32::<LittleEndian>(4).unwrap();
+            file.write_i32::<LittleEndian>(3).unwrap();
+            file.write_i32::<LittleEndian>(4).unwrap();
+
+            for frame in 0..2 {
+                let shift = frame as f32 * 0.1;
+                for axis in 0..3 {
+                    let coords: Vec<f32> = match axis {
+                        0 => (0..3).map(|i| i as f32 + shift).collect(),
+                        _ => vec![0.0; 3],
+                    };
+                    let size = 12_i32;
+                    file.write_i32::<LittleEndian>(size).unwrap();
+                    for c in &coords {
+                        file.write_f32::<LittleEndian>(*c).unwrap();
+                    }
+                    file.write_i32::<LittleEndian>(size).unwrap();
+                }
+            }
+        }
+
+        let reader = DcdReader::open(&path).expect("open minimal dcd");
+        assert_eq!(reader.num_atoms(), 3);
+        assert_eq!(reader.num_frames(), 2);
+        let f0 = reader.read_frame(0).expect("frame 0");
+        assert!((f0.get_position(0).unwrap().x - 0.0).abs() < 1e-5);
+        let f1 = reader.read_frame(1).expect("frame 1");
+        assert!((f1.get_position(0).unwrap().x - 0.1).abs() < 1e-5);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

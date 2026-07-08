@@ -6,6 +6,7 @@ pub mod dcd;
 pub mod gro;
 pub mod mmcif;
 pub mod pdb;
+pub mod pdb_mmap;
 pub mod streaming;
 pub mod topology;
 pub mod xyz;

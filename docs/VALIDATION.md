@@ -74,7 +74,7 @@ Run: `cargo run --release -- tests/fixtures/1CRN.pdb`
 - [ ] Timeline: scrub slider, play/pause, arrow step (multi-frame: `demo_trajectory.xyz`)
 - [ ] Toggle GPU interpolation (`G` key) on multi-frame file
 - [ ] Export screenshot, OBJ, glTF; open outputs externally
-- [ ] Load GRO / mmCIF / DCD+topology from UI
+- [ ] Load GRO / mmCIF / DCD+topology from UI (automated pipeline coverage: `tests/e2e_secondary_formats.rs`)
 
 ---
 
@@ -165,10 +165,14 @@ Pass/fail is written to `target/profile_100k_*.json` and logged at `INFO` level.
 | Area | Implementation | Status |
 |------|----------------|--------|
 | Mmap XYZ load | `io/xyz_parallel.rs` for files ≥512 KiB | ✅ |
+| Mmap PDB load | `io/pdb_mmap.rs` for files ≥512 KiB | ✅ |
+| XYZ streaming | `io/xyz_stream.rs` + `FrameProvider` | ✅ |
+| Secondary format E2E pipeline | `tests/e2e_secondary_formats.rs` (GRO, mmCIF, DCD, PDB) | ✅ |
 | Parallel frame parse | rayon when ≥8 frames | ✅ |
 | Double/triple bonds | Parallel cylinder meshes per order | ✅ |
 
 ```bash
 cargo test --test sprint6_validation
-cargo test --lib xyz_parallel
+cargo test --test e2e_secondary_formats
+cargo test --lib xyz_parallel pdb_mmap
 ```

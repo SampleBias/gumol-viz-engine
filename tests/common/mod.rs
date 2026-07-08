@@ -2,6 +2,8 @@
 
 #![allow(dead_code)]
 
+pub mod dcd_fixture;
+
 use std::path::{Path, PathBuf};
 
 /// Path to a fixture file under `tests/fixtures/`.

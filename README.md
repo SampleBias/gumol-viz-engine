@@ -19,7 +19,7 @@ Gumol Viz Engine provides interactive visualization of molecular structures and 
 | Area | Capabilities |
 |------|----------------|
 | **Performance** | Instanced rendering, LOD, frustum culling, GPU frame interpolation, spatial bond detection, async loading, runtime FPS profiling |
-| **File formats** | XYZ, PDB, GRO, DCD (with topology), mmCIF |
+| **File formats** | XYZ, PDB, GRO, DCD (with topology), mmCIF; on-demand streaming for large XYZ/DCD trajectories |
 | **Visualization** | CPK, ball-and-stick, licorice, wireframe, points, surface, cartoon/tube/trace ribbons |
 | **Color schemes** | CPK, residue, chain, B-factor |
 | **Interaction** | Orbit camera, atom selection, box selection, distance/angle/dihedral measurements, atom labels |
@@ -171,10 +171,10 @@ let trajectory = match FileFormat::from_path(path) {
 
 | Format | Extension | Status | Notes |
 |--------|-----------|--------|-------|
-| XYZ | `.xyz` | Supported | Multi-frame trajectories; mmap + parallel parse for large files |
-| PDB | `.pdb` | Supported | ATOM, HETATM, CONECT, CRYST1 |
+| XYZ | `.xyz` | Supported | Multi-frame trajectories; mmap + parallel parse; seek-based streaming for large files |
+| PDB | `.pdb` | Supported | ATOM, HETATM, CONECT, CRYST1; mmap parse for files ≥512 KiB |
 | GRO | `.gro` | Supported | GROMACS coordinates |
-| DCD | `.dcd` | Supported | Binary trajectories; requires topology (PDB/GRO) |
+| DCD | `.dcd` | Supported | Binary trajectories; requires topology (PDB/GRO); streams when large |
 | mmCIF | `.cif`, `.mmcif` | Supported | Macromolecular structures |
 
 **XYZ example**
@@ -188,6 +188,8 @@ H -0.757 0.0 0.0
 ```
 
 See [docs/SECONDARY_FORMATS.md](docs/SECONDARY_FORMATS.md) for parser details.
+
+Large multi-frame XYZ and DCD files (≥ 1M atom×frames) load metadata only and fetch frames on demand via `FrameProvider`, with LRU caching and prefetch during playback (`src/io/streaming.rs`, `src/systems/frame_cache.rs`).
 
 ---
 
@@ -220,7 +222,7 @@ gumol-viz-engine/
 │   ├── main.rs             # Application entry point (gumol-viz binary)
 │   ├── lib.rs              # GumolVizPlugin and public re-exports
 │   ├── core/               # Atoms, bonds, molecules, trajectory, visualization types
-│   ├── io/                 # Format parsers, streaming, topology, xyz_parallel
+│   ├── io/                 # Format parsers, streaming, topology, xyz_parallel, xyz_stream, pdb_mmap
 │   ├── rendering/          # Instanced pipeline, GPU interpolation, LOD, culling,
 │   │                       # wireframe, ribbon, surface, material/mesh pools
 │   ├── systems/            # Loading, timeline, bonds, frame cache, visualization
@@ -242,7 +244,7 @@ gumol-viz-engine/
 | Module | Role |
 |--------|------|
 | `core/` | Data model: `Atom`, `Bond`, `Trajectory`, `RenderMode`, `TimelineState` |
-| `io/` | Parsers for XYZ, PDB, GRO, DCD, mmCIF; async load support; `xyz_parallel` mmap path |
+| `io/` | Parsers for XYZ, PDB, GRO, DCD, mmCIF; async load support; `xyz_parallel` / `pdb_mmap` mmap paths; `xyz_stream` seek-based XYZ streaming |
 | `rendering/` | Production render path via `instanced.rs`; auxiliary modes in wireframe, ribbon, surface |
 | `systems/` | ECS orchestration: load events, spawn/clear on reload, timeline, bonds |
 | `interaction/` | Picking, selection state, measurements, middle-mouse box select |
@@ -330,9 +332,10 @@ See [AGENTS.md](AGENTS.md) for naming conventions, ECS patterns, and module regi
 | Frustum culling | `src/rendering/culling.rs` |
 | GPU frame interpolation | `src/rendering/gpu_interpolation.rs`, `assets/shaders/atom_interpolate.wgsl` |
 | Spatial bond detection | `src/systems/bonds.rs`, `src/utils/spatial_index.rs` |
-| DCD streaming and frame cache | `src/io/streaming.rs`, `src/systems/frame_cache.rs` |
+| DCD / XYZ streaming and frame cache | `src/io/streaming.rs`, `src/io/xyz_stream.rs`, `src/systems/frame_cache.rs` |
 | Async file loading | `src/systems/loading.rs` |
 | Parallel / mmap XYZ parsing | `src/io/xyz_parallel.rs` |
+| Memory-mapped PDB parsing | `src/io/pdb_mmap.rs` |
 | Runtime FPS + profiling validation | `src/performance/fps.rs`, UI status panel |
 
 CPU-side 100K-atom position sync and draw-call budgets are covered by `tests/sprint1_validation.rs` and Criterion benches. Interactive GPU profiling at 100K atoms (bonds + UI + full frame) is validated in-app via CLI flags and helper scripts.
@@ -389,8 +392,8 @@ The status panel shows live FPS (current, average, min) and profiling progress. 
 - [x] Double/triple bond visual meshes
 - [x] DSSP secondary structure assignment
 - [x] XYZ streaming parser
-- [ ] Memory-mapped PDB loading
-- [ ] Manual end-to-end QA for GRO, DCD, mmCIF in the UI
+- [x] Memory-mapped PDB loading
+- [x] Manual end-to-end QA for GRO, DCD, mmCIF in the UI
 
 ### v1.0.0 — Production
 

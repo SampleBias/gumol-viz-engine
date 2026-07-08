@@ -25,10 +25,24 @@ impl PDBParser {
     pub fn parse_file_with_atoms(
         path: &Path,
     ) -> IOResult<(Trajectory, Vec<AtomData>, Vec<BondData>)> {
+        crate::io::pdb_mmap::parse_file_optimized(path)
+    }
+
+    /// Parse via buffered reader (legacy path for tests and small files).
+    pub fn parse_file_buffered(
+        path: &Path,
+    ) -> IOResult<(Trajectory, Vec<AtomData>, Vec<BondData>)> {
         let file =
             File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
         let reader = BufReader::new(file);
         Self::parse_reader(reader, path.to_path_buf())
+    }
+
+    /// Previous buffered entry point retained for callers that bypass optimization.
+    pub fn parse_file_with_atoms_buffered(
+        path: &Path,
+    ) -> IOResult<(Trajectory, Vec<AtomData>, Vec<BondData>)> {
+        Self::parse_file_buffered(path)
     }
 
     /// Parse PDB format from a reader
