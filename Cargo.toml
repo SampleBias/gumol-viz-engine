@@ -164,6 +164,10 @@ path = "examples/timeline_demo.rs"
 name = "interactive_selection"
 path = "examples/interactive_selection.rs"
 
+[[example]]
+name = "perf_100k"
+path = "examples/perf_100k.rs"
+
 [[bench]]
 name = "parsing"
 harness = false

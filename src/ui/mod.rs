@@ -17,7 +17,7 @@ use crate::export::video::{RequestVideoExportEvent, VideoExportSettings, VideoEx
 use crate::interaction::measurement::MeasurementState;
 use crate::interaction::selection::SelectionState;
 use crate::io::FileFormat;
-use crate::performance::{memory, PerformanceDiagnostics};
+use crate::performance::{memory, PerformanceUiState};
 use crate::rendering::instanced::InstancedAtomEntities;
 use crate::systems::bonds::{BondDetectionConfig, BondEntities};
 use crate::systems::loading::{
@@ -316,7 +316,7 @@ pub fn main_ui_panel(
     mut topology_ui: TopologyUiState,
     instanced_entities: Res<InstancedAtomEntities>,
     async_load: Res<AsyncLoadState>,
-    perf_diag: Res<PerformanceDiagnostics>,
+    perf_ui: PerformanceUiState,
     cli_arg: Res<CliFileArg>,
     mut picker_state: ResMut<FilePickerState>,
     mut export_panel: ExportPanelState,
@@ -390,20 +390,20 @@ pub fn main_ui_panel(
                             .color(bevy_egui::egui::Color32::from_rgb(200, 180, 50)),
                     );
                 }
-                if perf_diag.estimated_bytes > 0 {
+                if perf_ui.diagnostics.estimated_bytes > 0 {
                     ui.label(format!(
                         "  Est. memory: {}",
-                        memory::format_bytes(perf_diag.estimated_bytes)
+                        memory::format_bytes(perf_ui.diagnostics.estimated_bytes)
                     ));
                 }
-                if let Some(ref warn) = perf_diag.memory_warning {
+                if let Some(ref warn) = perf_ui.diagnostics.memory_warning {
                     ui.label(
                         bevy_egui::egui::RichText::new(format!("  ⚠ {warn}"))
                             .color(bevy_egui::egui::Color32::from_rgb(220, 140, 50)),
                     );
                 }
-                if perf_diag.selection_disabled {
-                    if let Some(ref reason) = perf_diag.selection_disabled_reason {
+                if perf_ui.diagnostics.selection_disabled {
+                    if let Some(ref reason) = perf_ui.diagnostics.selection_disabled_reason {
                         ui.label(
                             bevy_egui::egui::RichText::new(format!("  ⚠ {reason}"))
                                 .color(bevy_egui::egui::Color32::from_rgb(220, 140, 50)),
@@ -448,10 +448,60 @@ pub fn main_ui_panel(
                 }
                 ui.label(format!(
                     "  Visible/Culled: {}/{}  LOD: {}",
-                    perf_diag.visible_instance_count,
-                    perf_diag.culled_instance_count,
-                    perf_diag.current_lod.name()
+                    perf_ui.diagnostics.visible_instance_count,
+                    perf_ui.diagnostics.culled_instance_count,
+                    perf_ui.diagnostics.current_lod.name()
                 ));
+                if perf_ui.frame_stats.samples > 0 {
+                    ui.label(format!(
+                        "  FPS: {:.1} (avg {:.1}, min {:.1})  Frame: {:.2} ms",
+                        perf_ui.frame_stats.current_fps,
+                        perf_ui.frame_stats.avg_fps,
+                        if perf_ui.frame_stats.min_fps == f32::MAX {
+                            0.0
+                        } else {
+                            perf_ui.frame_stats.min_fps
+                        },
+                        perf_ui.frame_stats.frame_time_ms
+                    ));
+                }
+                if perf_ui.profiling.active {
+                    let phase_label = match perf_ui.profiling.phase {
+                        crate::performance::ProfilingPhase::WaitingForLoad => {
+                            "waiting for load".to_string()
+                        }
+                        crate::performance::ProfilingPhase::Warmup => format!(
+                            "warmup {}/{}",
+                            perf_ui.profiling.frames_in_phase, perf_ui.profiling.warmup_frames
+                        ),
+                        crate::performance::ProfilingPhase::Sampling => format!(
+                            "sampling {}/{}",
+                            perf_ui.profiling.frames_in_phase, perf_ui.profiling.sample_frames
+                        ),
+                        crate::performance::ProfilingPhase::Complete => "complete".to_string(),
+                    };
+                    ui.label(
+                        bevy_egui::egui::RichText::new(format!("  Profiling: {phase_label}"))
+                            .color(bevy_egui::egui::Color32::from_rgb(120, 180, 255)),
+                    );
+                }
+                if let Some(ref report) = perf_ui.diagnostics.profiling_report {
+                    let color = if report.passed {
+                        bevy_egui::egui::Color32::from_rgb(80, 200, 120)
+                    } else {
+                        bevy_egui::egui::Color32::from_rgb(220, 100, 100)
+                    };
+                    ui.label(
+                        bevy_egui::egui::RichText::new(format!(
+                            "  Profile {}: avg {:.1} FPS, p95 {:.2} ms (target {:.0} FPS)",
+                            if report.passed { "PASS" } else { "FAIL" },
+                            report.avg_fps,
+                            report.p95_frame_time_ms,
+                            report.target_fps
+                        ))
+                        .color(color),
+                    );
+                }
             } else {
                 ui.label(
                     bevy_egui::egui::RichText::new("✗ No file loaded")

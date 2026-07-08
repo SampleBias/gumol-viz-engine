@@ -115,7 +115,7 @@ The engine has a working instanced-rendering pipeline, full primary/secondary fi
 - [x] Prove 100K-atom position-sync @ 60 FPS budget (criterion ~3.9 ms; see `docs/VALIDATION.md`)
 - [x] Validate GPU interpolation CPU reference parity (unit + integration tests)
 - [x] Enforce benchmark regression gate in CI (script exists; `bench-regression` job on PR/push)
-- [ ] Full interactive 100K @ 60 FPS with bonds + UI (CPU estimate in Sprint 5; GPU profiling pending)
+- [x] Full interactive 100K @ 60 FPS with bonds + UI (`--profile` CLI, `scripts/profile_100k_*.sh`, Sprint 7)
 - [x] Parallel trajectory parsing with `rayon` (XYZ multi-frame in `io/xyz_parallel.rs`)
 - [x] Memory-mapped XYZ loading (`io/xyz_parallel.rs` for files ≥512 KiB)
 

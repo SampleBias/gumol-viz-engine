@@ -234,6 +234,60 @@ pub struct CliFileArg(pub Option<PathBuf>);
 #[derive(Resource, Default, Debug)]
 pub struct CliTopologyArg(pub Option<PathBuf>);
 
+/// CLI options for automated interactive GPU profiling validation.
+#[derive(Resource, Clone, Debug)]
+pub struct ProfileCliArgs {
+    pub enabled: bool,
+    pub warmup_frames: u32,
+    pub sample_frames: u32,
+    pub playback: bool,
+    pub exit_on_complete: bool,
+    pub min_fps_static: f32,
+    pub min_fps_playback: f32,
+    pub output_path: Option<PathBuf>,
+    pub generate_100k: bool,
+}
+
+impl Default for ProfileCliArgs {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            warmup_frames: 120,
+            sample_frames: 300,
+            playback: false,
+            exit_on_complete: false,
+            min_fps_static: crate::performance::TARGET_FPS,
+            min_fps_playback: crate::performance::PLAYBACK_TARGET_FPS,
+            output_path: None,
+            generate_100k: false,
+        }
+    }
+}
+
+impl ProfileCliArgs {
+    fn merge_env(mut self) -> Self {
+        if std::env::var("GUMOL_PROFILE").is_ok() {
+            self.enabled = true;
+        }
+        if std::env::var("GUMOL_PROFILE_EXIT").is_ok() {
+            self.exit_on_complete = true;
+        }
+        if std::env::var("GUMOL_PROFILE_PLAYBACK").is_ok() {
+            self.playback = true;
+        }
+        if let Ok(path) = std::env::var("GUMOL_PROFILE_OUTPUT") {
+            self.output_path = Some(PathBuf::from(path));
+        }
+        self
+    }
+}
+
+struct ParsedCli {
+    trajectory: Option<PathBuf>,
+    topology: Option<PathBuf>,
+    profile: ProfileCliArgs,
+}
+
 /// Tracks topology file state for DCD trajectories
 #[derive(Resource, Default, Debug)]
 pub struct TopologyState {
@@ -672,7 +726,26 @@ pub fn handle_load_file_events_sync(
 }
 
 /// Load a file provided via CLI argument
-pub fn load_cli_file(cli_arg: Res<CliFileArg>, mut load_events: EventWriter<LoadFileEvent>) {
+pub fn load_cli_file(
+    cli_arg: Res<CliFileArg>,
+    profile: Res<ProfileCliArgs>,
+    mut load_events: EventWriter<LoadFileEvent>,
+) {
+    if profile.generate_100k {
+        if let Err(err) = crate::utils::synthetic::ensure_100k_fixtures() {
+            warn!("Failed to generate 100K fixtures: {err}");
+            return;
+        }
+        let path = if profile.playback {
+            PathBuf::from(crate::utils::synthetic::SYNTHETIC_100K_PLAYBACK_XYZ)
+        } else {
+            PathBuf::from(crate::utils::synthetic::SYNTHETIC_100K_XYZ)
+        };
+        info!("Loading generated 100K profiling fixture: {}", path.display());
+        load_events.send(LoadFileEvent { path });
+        return;
+    }
+
     if let Some(ref path) = cli_arg.0 {
         if path.exists() {
             info!("Loading CLI-provided file: {:?}", path);
@@ -775,11 +848,16 @@ pub fn track_topology_requirement(
 
 /// Register loading resources and events. Systems are registered centrally in systems::register.
 pub fn register(app: &mut App) {
-    let (cli_path, cli_topology) = parse_cli_args();
+    let parsed = parse_cli_args();
+    let profile_args = parsed.profile.merge_env();
 
     app.init_resource::<SimulationData>()
-        .insert_resource(CliFileArg(cli_path))
-        .insert_resource(CliTopologyArg(cli_topology))
+        .insert_resource(CliFileArg(parsed.trajectory))
+        .insert_resource(CliTopologyArg(parsed.topology))
+        .insert_resource(profile_args.clone())
+        .insert_resource(crate::performance::ProfilingSession::from_cli(
+            &profile_args,
+        ))
         .init_resource::<TopologyState>()
         .init_resource::<AsyncLoadState>()
         .add_event::<LoadFileEvent>()
@@ -791,11 +869,16 @@ pub fn register(app: &mut App) {
     info!("Loading resources registered");
 }
 
-/// Parse CLI arguments: `cargo run -- traj.dcd --topology struct.pdb`
-fn parse_cli_args() -> (Option<PathBuf>, Option<PathBuf>) {
-    let args: Vec<String> = std::env::args().collect();
+/// Parse CLI arguments: `cargo run -- traj.dcd --topology struct.pdb --profile`
+fn parse_cli_args() -> ParsedCli {
+    parse_cli_args_from_iter(std::env::args())
+}
+
+fn parse_cli_args_from_iter(args: impl IntoIterator<Item = String>) -> ParsedCli {
+    let args: Vec<String> = args.into_iter().collect();
     let mut trajectory = None;
     let mut topology = None;
+    let mut profile = ProfileCliArgs::default();
     let mut i = 1;
 
     while i < args.len() {
@@ -806,6 +889,38 @@ fn parse_cli_args() -> (Option<PathBuf>, Option<PathBuf>) {
                     topology = Some(PathBuf::from(&args[i]));
                 }
             }
+            "--profile" => {
+                profile.enabled = true;
+            }
+            "--profile-exit" => {
+                profile.enabled = true;
+                profile.exit_on_complete = true;
+            }
+            "--profile-playback" => {
+                profile.enabled = true;
+                profile.playback = true;
+            }
+            "--generate-100k" => {
+                profile.generate_100k = true;
+            }
+            arg if arg.starts_with("--profile-warmup=") => {
+                profile.enabled = true;
+                if let Some(v) = arg.split('=').nth(1) {
+                    profile.warmup_frames = v.parse().unwrap_or(profile.warmup_frames);
+                }
+            }
+            arg if arg.starts_with("--profile-frames=") => {
+                profile.enabled = true;
+                if let Some(v) = arg.split('=').nth(1) {
+                    profile.sample_frames = v.parse().unwrap_or(profile.sample_frames);
+                }
+            }
+            arg if arg.starts_with("--profile-output=") => {
+                profile.enabled = true;
+                if let Some(v) = arg.split('=').nth(1) {
+                    profile.output_path = Some(PathBuf::from(v));
+                }
+            }
             arg if !arg.starts_with('-') && trajectory.is_none() => {
                 trajectory = Some(PathBuf::from(arg));
             }
@@ -814,7 +929,11 @@ fn parse_cli_args() -> (Option<PathBuf>, Option<PathBuf>) {
         i += 1;
     }
 
-    (trajectory, topology)
+    ParsedCli {
+        trajectory,
+        topology,
+        profile,
+    }
 }
 
 #[cfg(test)]
@@ -874,6 +993,38 @@ mod tests {
         let sim_data = SimulationData::new(trajectory, atom_data);
         assert!(sim_data.loaded);
         assert_eq!(sim_data.num_atoms(), 100);
+    }
+
+    #[test]
+    fn test_profile_cli_flags() {
+        let parsed = parse_cli_args_from_iter([
+            "gumol".to_string(),
+            "--profile".to_string(),
+            "--profile-exit".to_string(),
+            "--generate-100k".to_string(),
+            "--profile-warmup=60".to_string(),
+            "--profile-frames=120".to_string(),
+            "tests/fixtures/synthetic_100k.xyz".to_string(),
+        ]);
+        assert!(parsed.profile.enabled);
+        assert!(parsed.profile.exit_on_complete);
+        assert!(parsed.profile.generate_100k);
+        assert_eq!(parsed.profile.warmup_frames, 60);
+        assert_eq!(parsed.profile.sample_frames, 120);
+        assert_eq!(
+            parsed.trajectory,
+            Some(PathBuf::from("tests/fixtures/synthetic_100k.xyz"))
+        );
+    }
+
+    #[test]
+    fn test_profile_playback_flag() {
+        let parsed = parse_cli_args_from_iter([
+            "gumol".to_string(),
+            "--profile-playback".to_string(),
+        ]);
+        assert!(parsed.profile.enabled);
+        assert!(parsed.profile.playback);
     }
 
     #[test]

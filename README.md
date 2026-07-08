@@ -18,7 +18,7 @@ Gumol Viz Engine provides interactive visualization of molecular structures and 
 
 | Area | Capabilities |
 |------|----------------|
-| **Performance** | Instanced rendering, LOD, frustum culling, GPU frame interpolation, spatial bond detection, async loading |
+| **Performance** | Instanced rendering, LOD, frustum culling, GPU frame interpolation, spatial bond detection, async loading, runtime FPS profiling |
 | **File formats** | XYZ, PDB, GRO, DCD (with topology), mmCIF |
 | **Visualization** | CPK, ball-and-stick, licorice, wireframe, points, surface, cartoon/tube/trace ribbons |
 | **Color schemes** | CPK, residue, chain, B-factor |
@@ -283,6 +283,7 @@ cargo doc --no-deps --open
 cargo run --example basic_load
 cargo run --example timeline_demo
 cargo run --example interactive_selection
+cargo run --example perf_100k -- --profile --generate-100k --profile-exit
 cargo run --example xyz_viewer -- input.xyz
 cargo run --example pdb_viewer -- input.pdb
 ```
@@ -293,9 +294,10 @@ cargo run --example pdb_viewer -- input.pdb
 cargo test                    # All tests
 cargo test -- --nocapture     # With output
 cargo test --test sprint1_validation
+cargo test --test sprint7_validation
 ```
 
-Integration tests cover format loading, the instanced pipeline, plugin registration, and sprint validation suites (`tests/sprint1_validation.rs`, `tests/sprint5_validation.rs`, `tests/sprint6_validation.rs`).
+Integration tests cover format loading, the instanced pipeline, plugin registration, and sprint validation suites (`tests/sprint1_validation.rs`, `tests/sprint5_validation.rs`, `tests/sprint6_validation.rs`, `tests/sprint7_validation.rs`).
 
 ### Quality checks
 
@@ -331,8 +333,31 @@ See [AGENTS.md](AGENTS.md) for naming conventions, ECS patterns, and module regi
 | DCD streaming and frame cache | `src/io/streaming.rs`, `src/systems/frame_cache.rs` |
 | Async file loading | `src/systems/loading.rs` |
 | Parallel / mmap XYZ parsing | `src/io/xyz_parallel.rs` |
+| Runtime FPS + profiling validation | `src/performance/fps.rs`, UI status panel |
 
-CPU-side 100K-atom position sync and draw-call budgets are covered by `tests/sprint1_validation.rs` and Criterion benches. Full interactive GPU profiling at 100K atoms with bonds and UI is tracked in [tasks/todo.md](tasks/todo.md).
+CPU-side 100K-atom position sync and draw-call budgets are covered by `tests/sprint1_validation.rs` and Criterion benches. Interactive GPU profiling at 100K atoms (bonds + UI + full frame) is validated in-app via CLI flags and helper scripts.
+
+### 100K @ 60 FPS validation
+
+Generate synthetic fixtures and run automated profiling (warmup + sampling, JSON report, pass/fail exit code):
+
+```bash
+# Static scene — 60 FPS target
+./scripts/profile_100k_static.sh
+
+# Trajectory playback — 30+ FPS target
+./scripts/profile_100k_playback.sh
+```
+
+Or use CLI flags directly:
+
+```bash
+cargo run --release -- \
+  --profile --profile-exit --generate-100k \
+  --profile-output=target/profile_100k_static.json
+```
+
+The status panel shows live FPS (current, average, min) and profiling progress. See [docs/PROFILING.md](docs/PROFILING.md) and [docs/VALIDATION.md](docs/VALIDATION.md) for pass criteria, Chrome trace workflow, and benchmark regression gates.
 
 ---
 
@@ -356,7 +381,7 @@ CPU-side 100K-atom position sync and draw-call budgets are covered by `tests/spr
 - [x] POV-Ray export
 - [x] Box selection and atom labels
 - [x] `timeline_demo` and `interactive_selection` examples
-- [ ] Interactive 100K-atom @ 60 FPS validation (GPU profiling)
+- [x] Interactive 100K-atom @ 60 FPS validation (GPU profiling)
 
 ### v0.3.0 — Scale and I/O (in progress)
 

@@ -1,8 +1,22 @@
 //! Performance settings, memory budgeting, and runtime diagnostics.
 
+pub mod fps;
 pub mod memory;
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+pub use fps::{
+    FrameStats, ProfilingPhase, ProfilingReport, ProfilingSession, FRAME_BUDGET_MS,
+    PLAYBACK_TARGET_FPS, TARGET_FPS,
+};
+
+/// Grouped performance resources for UI systems (keeps system param count low).
+#[derive(SystemParam)]
+pub struct PerformanceUiState<'w> {
+    pub frame_stats: Res<'w, FrameStats>,
+    pub profiling: Res<'w, ProfilingSession>,
+    pub diagnostics: Res<'w, PerformanceDiagnostics>,
+}
 
 /// Global performance toggles and limits.
 #[derive(Resource, Clone, Debug)]
@@ -45,10 +59,13 @@ pub struct PerformanceDiagnostics {
     pub culled_instance_count: usize,
     pub visible_instance_count: usize,
     pub current_lod: crate::rendering::lod::AtomLod,
+    pub profiling_report: Option<ProfilingReport>,
 }
 
 pub fn register(app: &mut App) {
     app.init_resource::<PerformanceSettings>()
-        .init_resource::<PerformanceDiagnostics>();
+        .init_resource::<PerformanceDiagnostics>()
+        .init_resource::<FrameStats>()
+        .add_systems(Update, (fps::update_frame_stats, fps::run_profiling_validation));
     info!("Performance module registered");
 }

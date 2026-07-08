@@ -90,7 +90,7 @@ Run: `cargo run --release -- tests/fixtures/1CRN.pdb`
 
 ## Known gaps after Sprint 1
 
-- Interactive 60 FPS at 100K with full scene (bonds + UI + GPU) not formally profiled in-app (Sprint 5 adds CPU budget estimate test)
+- Interactive 60 FPS at 100K with full scene (bonds + UI + GPU) — automated via `--profile` CLI and `scripts/profile_100k_*.sh` (Sprint 7)
 - Screenshot path not covered by automated test (requires window/GPU)
 - `dev_dynamic` profile not manually verified
 - 1CRN PDB CONECT records are sparse; ball-and-stick on proteins relies on distance detection when CONECT absent
@@ -126,7 +126,37 @@ Measured release benchmarks (Sprint 1) plus conservative per-frame estimates:
 | Bond position update (est.) | 0.5 |
 | **Total CPU estimate** | **~7.4 ms** |
 
-At ~7.4 ms, core CPU systems use ~44% of a 16.67 ms (60 FPS) frame, leaving headroom for GPU rendering and UI. Full interactive proof still requires in-app profiling (`docs/PROFILING.md`).
+At ~7.4 ms, core CPU systems use ~44% of a 16.67 ms (60 FPS) frame, leaving headroom for GPU rendering and UI. Full interactive proof uses the in-app profiling workflow (`docs/PROFILING.md`).
+
+---
+
+## Sprint 7 — Interactive 100K GPU profiling (2026-07-08)
+
+| Area | Test / feature | Status |
+|------|----------------|--------|
+| Synthetic 100K fixtures | `utils/synthetic.rs`, `scripts/generate_100k_fixture.sh` | ✅ |
+| Runtime FPS overlay | `performance/fps.rs`, UI status panel | ✅ |
+| Automated profiling CLI | `--profile`, `--profile-exit`, `--generate-100k` | ✅ |
+| Profiling report JSON | `ProfilingReport` pass/fail @ 60 / 30 FPS | ✅ |
+| Static profiling script | `scripts/profile_100k_static.sh` | ✅ |
+| Playback profiling script | `scripts/profile_100k_playback.sh` | ✅ |
+| Sprint 7 unit tests | `tests/sprint7_validation.rs` | ✅ |
+| `perf_100k` example | `examples/perf_100k.rs` | ✅ |
+
+Run Sprint 7 tests:
+
+```bash
+cargo test --test sprint7_validation
+```
+
+Interactive GPU validation (requires display + GPU):
+
+```bash
+./scripts/profile_100k_static.sh      # 100K static @ 60 FPS
+./scripts/profile_100k_playback.sh  # 100K playback @ 30+ FPS
+```
+
+Pass/fail is written to `target/profile_100k_*.json` and logged at `INFO` level.
 
 ---
 
