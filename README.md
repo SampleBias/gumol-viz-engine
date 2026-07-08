@@ -303,11 +303,11 @@ Read the [Development Plan](docs/DEVELOPMENT_PLAN.md) and [Architecture Guide](d
 - [ ] 100K-atom performance validation (CPU estimate done; interactive GPU profiling pending)
 - [ ] Fix headless plugin registration test
 
-### Version 0.3.0 — Scale & I/O
-- [ ] Memory-mapped / streamed XYZ loading
-- [ ] Parallel trajectory parsing (rayon)
+### Version 0.3.0 — Scale & I/O (in progress)
+- [x] Memory-mapped / streamed XYZ loading (mmap + parallel frames)
+- [x] Parallel trajectory parsing (rayon, XYZ)
+- [x] Double/triple bond visual meshes
 - [ ] DSSP secondary structure
-- [ ] Double/triple bond visual meshes
 
 ### Version 1.0.0 — Production
 - [ ] All planned features complete

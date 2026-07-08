@@ -145,6 +145,84 @@ fn compute_bond_rotation(bond_vector: Vec3, bond_length: f32) -> Quat {
     }
 }
 
+/// Number of parallel cylinders to draw for a bond order.
+pub fn bond_cylinder_count(order: BondOrder) -> usize {
+    match order {
+        BondOrder::Single => 1,
+        BondOrder::Double => 2,
+        BondOrder::Triple => 3,
+    }
+}
+
+/// Local X offsets (in bond-local space) for multi-order bond cylinders.
+pub fn bond_cylinder_local_offsets(order: BondOrder, spacing: f32) -> Vec<f32> {
+    let count = bond_cylinder_count(order);
+    (0..count)
+        .map(|i| (i as f32 - (count as f32 - 1.0) * 0.5) * spacing)
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_bond_visual(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    material: Handle<StandardMaterial>,
+    bond_data: &BondData,
+    pos_a: Vec3,
+    pos_b: Vec3,
+    bond_length: f32,
+    base_radius: f32,
+    visibility: Visibility,
+) -> Entity {
+    let bond_vector = pos_b - pos_a;
+    let bond_midpoint = pos_a + bond_vector * 0.5;
+    let rotation = compute_bond_rotation(bond_vector, bond_length);
+    let spacing = 0.16 * base_radius.max(0.05) / 0.1;
+    let offsets = bond_cylinder_local_offsets(bond_data.order, spacing);
+    let radius = base_radius * if bond_data.order == BondOrder::Single {
+        1.0
+    } else {
+        0.82
+    };
+    let bond_mesh = meshes.add(rendering::generate_bond_mesh(bond_length, radius));
+
+    let parent = commands
+        .spawn((
+            SpatialBundle {
+                transform: Transform {
+                    translation: bond_midpoint,
+                    rotation,
+                    ..default()
+                },
+                visibility,
+                ..default()
+            },
+            Bond {
+                atom_a: Entity::PLACEHOLDER,
+                atom_b: Entity::PLACEHOLDER,
+                atom_a_id: bond_data.atom_a_id,
+                atom_b_id: bond_data.atom_b_id,
+                bond_type: bond_data.bond_type,
+                order: bond_data.order,
+                length: bond_length,
+            },
+        ))
+        .id();
+
+    for x in offsets {
+        commands
+            .spawn(PbrBundle {
+                mesh: bond_mesh.clone(),
+                material: material.clone(),
+                transform: Transform::from_translation(Vec3::new(x, 0.0, 0.0)),
+                ..default()
+            })
+            .set_parent(parent);
+    }
+
+    parent
+}
+
 fn detect_bonds_naive(
     sim_data: &crate::systems::loading::SimulationData,
     positions: &HashMap<u32, Vec3>,
@@ -351,38 +429,23 @@ pub fn spawn_bonds(
             continue;
         }
 
-        let bond_midpoint = *pos_a + bond_vector * 0.5;
-        let bond_mesh = meshes.add(rendering::generate_bond_mesh(bond_length, base_radius));
-        let rotation = compute_bond_rotation(bond_vector, bond_length);
+        let visibility = if viz_config.show_bonds {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
 
-        let bond_entity = commands
-            .spawn((
-                PbrBundle {
-                    mesh: bond_mesh,
-                    material: bond_material.clone(),
-                    transform: Transform {
-                        translation: bond_midpoint,
-                        rotation,
-                        scale: Vec3::ONE,
-                    },
-                    visibility: if viz_config.show_bonds {
-                        Visibility::Visible
-                    } else {
-                        Visibility::Hidden
-                    },
-                    ..default()
-                },
-                Bond {
-                    atom_a: Entity::PLACEHOLDER,
-                    atom_b: Entity::PLACEHOLDER,
-                    atom_a_id: bond_data.atom_a_id,
-                    atom_b_id: bond_data.atom_b_id,
-                    bond_type: bond_data.bond_type,
-                    order: bond_data.order,
-                    length: bond_length,
-                },
-            ))
-            .id();
+        let bond_entity = spawn_bond_visual(
+            &mut commands,
+            &mut meshes,
+            bond_material.clone(),
+            &bond_data,
+            *pos_a,
+            *pos_b,
+            bond_length,
+            base_radius,
+            visibility,
+        );
 
         bond_entities.entities.insert(
             bond_key(bond_data.atom_a_id, bond_data.atom_b_id),
@@ -521,6 +584,14 @@ mod tests {
         let config = BondDetectionConfig::default();
         let bonded = config.should_bond(Element::C, Element::C, 0, 0, 1.54);
         assert!(bonded, "C-C at 1.54 A should be bonded");
+    }
+
+    #[test]
+    fn test_bond_order_cylinder_layout() {
+        assert_eq!(bond_cylinder_count(BondOrder::Double), 2);
+        let offsets = bond_cylinder_local_offsets(BondOrder::Triple, 0.2);
+        assert_eq!(offsets.len(), 3);
+        assert!(offsets[0] < offsets[1] && offsets[1] < offsets[2]);
     }
 
     #[test]

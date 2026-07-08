@@ -20,6 +20,11 @@ pub struct XYZParser;
 impl XYZParser {
     /// Parse an XYZ file and return trajectory data
     pub fn parse_file(path: &Path) -> IOResult<Trajectory> {
+        crate::io::xyz_parallel::parse_file_optimized(path)
+    }
+
+    /// Parse via buffered reader (legacy path for tests and small strings).
+    pub fn parse_file_buffered(path: &Path) -> IOResult<Trajectory> {
         let file =
             File::open(path).map_err(|_e| IOError::FileNotFound(path.display().to_string()))?;
         let reader = BufReader::new(file);

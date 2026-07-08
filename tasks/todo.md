@@ -102,7 +102,7 @@ The engine has a working instanced-rendering pipeline, full primary/secondary fi
 
 - [x] **Surface mode** — coarse solvent-accessible voxel shell (`rendering/surface.rs`)
 - [x] **Color schemes** — CPK, Residue, Chain, B-factor wired to instanced colors + UI
-- [ ] **Double/triple bond meshes** — order detected; no separate visual geometry
+- [x] **Double/triple bond meshes** — parallel cylinders per bond order in `systems/bonds.rs`
 
 ### Priority: HIGH — Export
 
@@ -116,7 +116,8 @@ The engine has a working instanced-rendering pipeline, full primary/secondary fi
 - [x] Validate GPU interpolation CPU reference parity (unit + integration tests)
 - [x] Enforce benchmark regression gate in CI (script exists; `bench-regression` job on PR/push)
 - [ ] Full interactive 100K @ 60 FPS with bonds + UI (CPU estimate in Sprint 5; GPU profiling pending)
-- [ ] Parallel trajectory parsing with `rayon` (dependency present; not wired)
+- [x] Parallel trajectory parsing with `rayon` (XYZ multi-frame in `io/xyz_parallel.rs`)
+- [x] Memory-mapped XYZ loading (`io/xyz_parallel.rs` for files ≥512 KiB)
 
 ### Priority: MEDIUM — Interaction & Camera
 
@@ -185,6 +186,12 @@ See interactive checklist in `docs/VALIDATION.md`.
 - [x] Benchmark suite and baseline
 - [ ] Puffin/Tracy profiling integration (Bevy `trace` feature available; puffin not added)
 - [ ] Parallel file parsing with rayon
+
+### 2026-07-08 — Sprint 6 (v0.3 scale & I/O kickoff)
+- [x] Memory-mapped XYZ parsing (`io/xyz_parallel.rs`)
+- [x] Parallel multi-frame XYZ parsing with rayon
+- [x] Double/triple bond cylinder visuals
+- [x] Sprint 6 validation tests
 
 ### 2026-07-08 — Sprint 5 (interaction + CPU budget)
 - [x] Box selection (middle-mouse drag, Shift additive)

@@ -127,3 +127,18 @@ Measured release benchmarks (Sprint 1) plus conservative per-frame estimates:
 | **Total CPU estimate** | **~7.4 ms** |
 
 At ~7.4 ms, core CPU systems use ~44% of a 16.67 ms (60 FPS) frame, leaving headroom for GPU rendering and UI. Full interactive proof still requires in-app profiling (`docs/PROFILING.md`).
+
+---
+
+## Sprint 6 — Scale & I/O (2026-07-08)
+
+| Area | Implementation | Status |
+|------|----------------|--------|
+| Mmap XYZ load | `io/xyz_parallel.rs` for files ≥512 KiB | ✅ |
+| Parallel frame parse | rayon when ≥8 frames | ✅ |
+| Double/triple bonds | Parallel cylinder meshes per order | ✅ |
+
+```bash
+cargo test --test sprint6_validation
+cargo test --lib xyz_parallel
+```
