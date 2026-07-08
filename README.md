@@ -387,7 +387,7 @@ The status panel shows live FPS (current, average, min) and profiling progress. 
 
 - [x] Memory-mapped and parallel XYZ loading
 - [x] Double/triple bond visual meshes
-- [ ] DSSP secondary structure assignment
+- [x] DSSP secondary structure assignment
 - [ ] XYZ streaming parser
 - [ ] Memory-mapped PDB loading
 - [ ] Manual end-to-end QA for GRO, DCD, mmCIF in the UI
