@@ -10,6 +10,7 @@ pub mod streaming;
 pub mod topology;
 pub mod xyz;
 pub mod xyz_parallel;
+pub mod xyz_stream;
 
 use crate::core::atom::AtomData;
 use crate::core::bond::BondData;

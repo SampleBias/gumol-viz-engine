@@ -10,7 +10,6 @@ use crate::io::gro::GroParser;
 use crate::io::mmcif::MmcifParser;
 use crate::io::pdb::PDBParser;
 use crate::io::streaming::{self, FrameProvider};
-use crate::io::xyz::XYZParser;
 use crate::io::{load_topology, FileFormat, IOResult};
 use bevy::prelude::*;
 use std::fs::File;
@@ -343,9 +342,9 @@ fn load_file(path: &Path, topology_path: Option<&Path>) -> IOResult<ParsedLoadRe
 
     match format {
         FileFormat::XYZ => {
-            let trajectory = XYZParser::parse_file(path)?;
+            let (trajectory, frame_provider) = streaming::open_xyz(path)?;
             let atom_data = create_atom_data_from_xyz(&trajectory)?;
-            Ok((trajectory, atom_data, Vec::new(), None, false))
+            Ok((trajectory, atom_data, Vec::new(), frame_provider, false))
         }
         FileFormat::PDB => {
             let (trajectory, atom_data, bond_data) = PDBParser::parse_file_with_atoms(path)?;
@@ -381,63 +380,57 @@ fn load_file(path: &Path, topology_path: Option<&Path>) -> IOResult<ParsedLoadRe
     }
 }
 
-/// Create atom data from XYZ trajectory
+/// Create atom data from XYZ trajectory (works with streaming trajectories).
 fn create_atom_data_from_xyz(trajectory: &Trajectory) -> IOResult<Vec<AtomData>> {
     let mut atom_data = Vec::new();
 
-    if let Some(first_frame) = trajectory.get_frame(0) {
-        // Parse XYZ file to get element information
-        if trajectory.file_path.exists() {
-            let file = File::open(&trajectory.file_path)?;
-            let reader = BufReader::new(file);
-            let mut lines = reader.lines();
-            let mut atom_index = 0;
+    if trajectory.num_atoms > 0 && trajectory.file_path.exists() {
+        let file = File::open(&trajectory.file_path)?;
+        let reader = BufReader::new(file);
+        let mut lines = reader.lines();
+        let mut atom_index = 0;
 
-            // Skip first line (number of atoms)
-            let _ = lines.next();
-            // Skip comment line
-            let _ = lines.next();
+        // Skip first line (number of atoms)
+        let _ = lines.next();
+        // Skip comment line
+        let _ = lines.next();
 
-            // Parse atom lines
-            while atom_index < trajectory.num_atoms {
-                if let Some(Ok(line)) = lines.next() {
-                    let parts: Vec<&str> = line.split_whitespace().collect();
+        // Parse atom lines from the first frame
+        while atom_index < trajectory.num_atoms {
+            if let Some(Ok(line)) = lines.next() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
 
-                    if parts.len() >= 4 {
-                        // Parse element
-                        let element = Element::from_symbol(parts[0]).unwrap_or_else(|_| {
-                            warn!("Unknown element: {}, using Unknown", parts[0]);
-                            Element::Unknown
-                        });
+                if parts.len() >= 4 {
+                    let element = Element::from_symbol(parts[0]).unwrap_or_else(|_| {
+                        warn!("Unknown element: {}, using Unknown", parts[0]);
+                        Element::Unknown
+                    });
 
-                        // Create atom data
-                        atom_data.push(AtomData::new(
-                            atom_index as u32,
-                            element,
-                            0,                    // residue ID
-                            "UNK".to_string(),    // residue name
-                            "A".to_string(),      // chain ID
-                            parts[0].to_string(), // atom name (use element symbol)
-                        ));
+                    atom_data.push(AtomData::new(
+                        atom_index as u32,
+                        element,
+                        0,
+                        "UNK".to_string(),
+                        "A".to_string(),
+                        parts[0].to_string(),
+                    ));
 
-                        atom_index += 1;
-                    }
-                } else {
-                    break;
+                    atom_index += 1;
                 }
+            } else {
+                break;
             }
-        } else {
-            // Fallback: create atom data without element info
-            for atom_id in first_frame.atom_ids() {
-                atom_data.push(AtomData::new(
-                    *atom_id,
-                    Element::Unknown,
-                    0,
-                    "UNK".to_string(),
-                    "A".to_string(),
-                    format!("ATOM{}", atom_id),
-                ));
-            }
+        }
+    } else if let Some(first_frame) = trajectory.get_frame(0) {
+        for atom_id in first_frame.atom_ids() {
+            atom_data.push(AtomData::new(
+                *atom_id,
+                Element::Unknown,
+                0,
+                "UNK".to_string(),
+                "A".to_string(),
+                format!("ATOM{atom_id}"),
+            ));
         }
     }
 

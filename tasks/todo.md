@@ -130,7 +130,7 @@ The engine has a working instanced-rendering pipeline, full primary/secondary fi
 ### Priority: MEDIUM — File I/O
 
 - [ ] Memory-mapped XYZ/PDB loading (`memmap2` dependency unused in `src/`)
-- [ ] XYZ streaming parser (`XYZStreamer` from dev plan — not built)
+- [x] XYZ streaming parser (`XyzFrameProvider` + `XYZStreamer`)
 - [ ] Manual end-to-end UI testing for GRO, DCD, mmCIF loads
 
 ### Priority: MEDIUM — Examples & Documentation
