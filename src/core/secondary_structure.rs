@@ -1,12 +1,15 @@
 //! Protein backbone extraction and secondary-structure assignment.
 //!
-//! v1 uses a distance-based heuristic (no DSSP). Sufficient for cartoon
-//! rendering of small proteins such as crambin (1CRN).
+//! Uses DSSP (Kabsch-Sander hydrogen-bond model via [`pdbrust`]) when backbone
+//! atoms (N, CA, C, O) are available; falls back to a distance-based heuristic
+//! for CA-only or incomplete structures.
 
+use crate::analysis::dssp;
 use crate::core::atom::AtomData;
 use crate::core::molecule::SecondaryStructure;
 use bevy::prelude::*;
 use std::collections::HashMap;
+use tracing::debug;
 
 /// Minimum CA atoms required before cartoon modes are offered in the UI.
 pub const MIN_CARTOON_RESIDUES: usize = 20;
@@ -37,7 +40,7 @@ impl ProteinBackbone {
     }
 }
 
-/// Extract CA backbone atoms and assign secondary structure heuristically.
+/// Extract CA backbone atoms and assign secondary structure (DSSP or heuristic).
 pub fn build_protein_backbone(
     atom_data: &[AtomData],
     positions: &HashMap<u32, Vec3>,
@@ -66,7 +69,7 @@ pub fn build_protein_backbone(
         })
         .collect();
 
-    assign_secondary_structure(&mut residues);
+    apply_secondary_structure(atom_data, positions, &mut residues);
 
     ProteinBackbone {
         ca_count,
@@ -75,8 +78,39 @@ pub fn build_protein_backbone(
     }
 }
 
+/// Assign secondary structure via DSSP, falling back to a distance heuristic.
+fn apply_secondary_structure(
+    atom_data: &[AtomData],
+    positions: &HashMap<u32, Vec3>,
+    residues: &mut [BackboneResidue],
+) {
+    let dssp_result = dssp::assign_dssp(atom_data, positions);
+    if dssp_result.used_dssp {
+        for residue in residues.iter_mut() {
+            let key = (residue.chain_id.clone(), residue.residue_id);
+            if let Some(ss) = dssp_result.assignments.get(&key) {
+                residue.secondary_structure = *ss;
+            }
+        }
+        debug!(
+            "DSSP assigned secondary structure to {} residues",
+            dssp_result.assignments.len()
+        );
+        for warning in &dssp_result.warnings {
+            debug!("DSSP: {warning}");
+        }
+        return;
+    }
+
+    debug!(
+        "DSSP unavailable ({:?}); using distance heuristic",
+        dssp_result.warnings
+    );
+    assign_secondary_structure_heuristic(residues);
+}
+
 /// Distance-based secondary structure assignment (helix / sheet / coil).
-pub fn assign_secondary_structure(residues: &mut [BackboneResidue]) {
+pub fn assign_secondary_structure_heuristic(residues: &mut [BackboneResidue]) {
     let n = residues.len();
     if n < 4 {
         return;

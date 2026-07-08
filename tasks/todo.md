@@ -145,7 +145,7 @@ The engine has a working instanced-rendering pipeline, full primary/secondary fi
 
 ### Priority: LOW — Advanced / v1.0+
 
-- [ ] DSSP-based secondary structure (replace distance heuristic)
+- [x] DSSP-based secondary structure (replace distance heuristic)
 - [ ] Volume / isosurface rendering
 - [ ] Dedicated settings panel (lighting, background, global render options)
 - [ ] Trajectory editing (cut, splice, merge)

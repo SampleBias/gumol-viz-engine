@@ -38,6 +38,7 @@
 //! - [`export`] - Export functionality
 //! - [`utils`] - Utility functions
 
+pub mod analysis;
 pub mod camera;
 pub mod core;
 pub mod export;
